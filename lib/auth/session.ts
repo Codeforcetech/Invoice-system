@@ -3,7 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
 
-const COOKIE_NAME = "invoice_session";
+export const SESSION_COOKIE_NAME = "invoice_session";
 
 type SessionPayload = {
   sub: string; // userId
@@ -16,31 +16,39 @@ function getSecretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSession(params: { userId: string; role: "USER" | "ADMIN" }) {
-  const token = await new SignJWT({ role: params.role } satisfies Omit<SessionPayload, "sub">)
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  };
+}
+
+export async function buildSessionToken(params: { userId: string; role: "USER" | "ADMIN" }) {
+  return new SignJWT({ role: params.role } satisfies Omit<SessionPayload, "sub">)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(params.userId)
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(getSecretKey());
+}
 
+export async function createSession(params: { userId: string; role: "USER" | "ADMIN" }) {
+  const token = await buildSessionToken(params);
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
 }
 
 export async function clearSession() {
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, "", { httpOnly: true, path: "/", maxAge: 0 });
+  cookieStore.set(SESSION_COOKIE_NAME, "", { httpOnly: true, path: "/", maxAge: 0 });
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
 
   try {

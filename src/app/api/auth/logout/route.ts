@@ -3,6 +3,6 @@ import { clearSession } from "@/lib/auth/session";
 
 export async function POST(req: Request) {
   await clearSession();
-  return NextResponse.redirect(new URL("/login", req.url));
+  return NextResponse.redirect(new URL("/login", req.url), 303);
 }
 

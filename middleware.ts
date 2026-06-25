@@ -27,6 +27,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // /api/* は含めない（ログイン POST 等を middleware でリダイレクトしない）
   matcher: [
     "/companies/:path*",
     "/invoices/:path*",
