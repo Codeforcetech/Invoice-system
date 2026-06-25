@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* `border` のみ指定した要素が foreground で真っ黒に見えないよう、既定の枠色を薄くする */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    border-color: rgb(226 232 240);
+  }
+}
