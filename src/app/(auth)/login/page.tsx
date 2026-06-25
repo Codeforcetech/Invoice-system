@@ -39,15 +39,6 @@ export default function LoginPage() {
           >
             ログイン
           </button>
-
-          <p className="text-xs text-zinc-500">
-            seedの初期ユーザー: <span className="font-mono">test@example.com</span> /{" "}
-            <span className="font-mono">password123</span>
-          </p>
-          <p className="text-xs text-zinc-500">
-            seedの管理者: <span className="font-mono">admin@example.com</span> /{" "}
-            <span className="font-mono">admin12345</span>
-          </p>
         </form>
       </div>
     </div>
