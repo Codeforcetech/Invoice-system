@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { generateShareToken } from "@/lib/invoice/generateShareToken";
+import { getSystemSettingByUserId } from "@/lib/settings/system-setting";
 
 const invoiceShareSelect = {
   id: true,
@@ -16,6 +17,7 @@ const invoiceShareSelect = {
   grandTotal: true,
   status: true,
   createdAt: true,
+  createdById: true,
   company: {
     select: {
       id: true,
@@ -54,11 +56,9 @@ export async function getInvoiceByShareToken(token: string) {
   });
 }
 
-/** 帳票表示用のシステム設定（認証不要・singleton） */
-export async function getSystemSettingForShare() {
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-  });
+/** 帳票表示用の自社設定（請求書作成者の設定） */
+export async function getSystemSettingForShare(userId: string) {
+  const settings = await getSystemSettingByUserId(userId);
   if (!settings) throw new Error("SYSTEM_SETTING_NOT_FOUND");
   return settings;
 }

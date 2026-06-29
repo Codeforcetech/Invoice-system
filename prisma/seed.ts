@@ -8,7 +8,7 @@ async function main() {
   const adminPassword = "admin12345";
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);
 
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: { role: UserRole.ADMIN },
     create: {
@@ -34,29 +34,35 @@ async function main() {
     },
   });
 
-  await prisma.systemSetting.upsert({
-    where: { id: "singleton" },
-    update: {},
-    create: {
-      id: "singleton",
-      companyName: "自社サンプル株式会社",
-      invoiceRegistrationNumber: "T1234567890123",
-      postalCode: "100-0001",
-      address: "東京都千代田区サンプル1-2-3",
-      phone: "03-0000-0000",
-      email: "billing@example.com",
-      contactPerson: "経理担当",
-      stampImageUrl: "",
-      bankName: "みずほ銀行",
-      branchName: "東京支店",
-      accountType: "普通",
-      accountNumber: "1234567",
-      accountHolder: "ジシャサンプル（カ",
-      accountHolderKana: "ジシャサンプルカブシキガイシャ",
-      transferNote: "振込手数料は貴社ご負担にてお願いいたします。",
-      taxRate: 1000,
-    },
-  });
+  const defaultSetting = {
+    companyName: "自社サンプル株式会社",
+    invoiceRegistrationNumber: "T1234567890123",
+    postalCode: "100-0001",
+    address: "東京都千代田区サンプル1-2-3",
+    phone: "03-0000-0000",
+    email: "billing@example.com",
+    contactPerson: "経理担当",
+    stampImageUrl: "",
+    bankName: "みずほ銀行",
+    branchName: "東京支店",
+    accountType: "普通",
+    accountNumber: "1234567",
+    accountHolder: "ジシャサンプル（カ",
+    accountHolderKana: "ジシャサンプルカブシキガイシャ",
+    transferNote: "振込手数料は貴社ご負担にてお願いいたします。",
+    taxRate: 1000,
+  };
+
+  for (const account of [admin, user]) {
+    await prisma.systemSetting.upsert({
+      where: { userId: account.id },
+      update: {},
+      create: {
+        userId: account.id,
+        ...defaultSetting,
+      },
+    });
+  }
 
   const companies: Array<{
     name: string;

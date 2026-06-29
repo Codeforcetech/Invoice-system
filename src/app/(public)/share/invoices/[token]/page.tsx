@@ -7,12 +7,10 @@ import { InvoicePrintView } from "@/app/(app)/invoices/_components/invoice-print
 export default async function SharedInvoicePage(props: { params: Promise<{ token: string }> }) {
   const { token } = await props.params;
 
-  const [invoice, settings] = await Promise.all([
-    getInvoiceByShareToken(token),
-    getSystemSettingForShare(),
-  ]);
-
+  const invoice = await getInvoiceByShareToken(token);
   if (!invoice) notFound();
+
+  const settings = await getSystemSettingForShare(invoice.createdById);
 
   return <InvoicePrintView invoice={invoice} settings={settings} embed publicShare />;
 }

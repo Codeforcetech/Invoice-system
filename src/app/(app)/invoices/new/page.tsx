@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/auth/require-user";
+import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { listCompaniesForInvoiceForm } from "@/actions/company-actions";
 import { listItemTemplates } from "@/actions/item-template-actions";
 import { listMailTemplates } from "@/actions/mail-template-actions";
-import { prisma } from "@/lib/db/prisma";
 import { InvoiceForm } from "@/app/(app)/invoices/_components/invoice-form";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -15,7 +15,7 @@ function toStr(v: string | string[] | undefined) {
 export default async function NewInvoicePage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = (await props.searchParams) ?? {};
   const companyIdFromQuery = toStr(sp.companyId) || "";
 
@@ -23,10 +23,7 @@ export default async function NewInvoicePage(props: {
     listCompaniesForInvoiceForm(),
     listItemTemplates(),
     listMailTemplates(),
-    prisma.systemSetting.findUnique({
-      where: { id: "singleton" },
-      select: { taxRate: true },
-    }),
+    getOrCreateSystemSetting(user.id),
   ]);
 
   const itemTemplates = itemRows.map((t) => ({
@@ -58,7 +55,7 @@ export default async function NewInvoicePage(props: {
         companies={companies}
         itemTemplates={itemTemplates}
         mailTemplates={mailTemplates}
-        defaultTaxRateBps={settings?.taxRate ?? 1000}
+        defaultTaxRateBps={settings.taxRate}
         mode="create"
         initialValues={{
           companyId: companyIdFromQuery || companies[0]?.id || "",

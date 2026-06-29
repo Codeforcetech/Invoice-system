@@ -1,16 +1,16 @@
 import { requireUser } from "@/lib/auth/require-user";
+import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { getInvoice, type InvoiceWithItems } from "@/actions/invoice-actions";
 import { listCompaniesForInvoiceForm } from "@/actions/company-actions";
 import { listItemTemplates } from "@/actions/item-template-actions";
 import { listMailTemplates } from "@/actions/mail-template-actions";
-import { prisma } from "@/lib/db/prisma";
 import { InvoiceForm } from "@/app/(app)/invoices/_components/invoice-form";
 import { EditToast } from "@/app/(app)/invoices/_components/edit-toast";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 
 export default async function EditInvoicePage(props: { params: Promise<{ invoiceId: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { invoiceId } = await props.params;
 
   const [invoice, companies, itemRows, mailRows, settings] = await Promise.all([
@@ -18,10 +18,7 @@ export default async function EditInvoicePage(props: { params: Promise<{ invoice
     listCompaniesForInvoiceForm(),
     listItemTemplates(),
     listMailTemplates(),
-    prisma.systemSetting.findUnique({
-      where: { id: "singleton" },
-      select: { taxRate: true },
-    }),
+    getOrCreateSystemSetting(user.id),
   ]);
 
   const itemTemplates = itemRows.map((t) => ({

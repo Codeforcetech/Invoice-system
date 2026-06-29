@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { adminCreateUserSchema, type AdminCreateUserInput } from "@/lib/validators/user";
 import { hashPassword } from "@/lib/auth/password";
+import { DEFAULT_SYSTEM_SETTING } from "@/lib/settings/system-setting";
 
 export async function listUsers(params: { q?: string } = {}) {
   await requireAdmin();
@@ -39,6 +40,12 @@ export async function adminCreateUser(raw: unknown) {
       email: input.email,
       passwordHash,
       role: input.role as UserRole,
+      systemSetting: {
+        create: {
+          companyName: DEFAULT_SYSTEM_SETTING.companyName,
+          taxRate: DEFAULT_SYSTEM_SETTING.taxRate,
+        },
+      },
     },
     select: { id: true },
   });

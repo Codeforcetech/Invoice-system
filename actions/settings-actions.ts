@@ -4,27 +4,20 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUser } from "@/lib/auth/require-user";
+import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { settingsUpdateSchema, type SettingsUpdateInput } from "@/lib/validators/settings";
 
 export async function getSettings() {
   const user = await requireUser();
-  void user;
-
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-  });
-  if (!settings) throw new Error("SYSTEM_SETTING_NOT_FOUND");
-  return settings;
+  return getOrCreateSystemSetting(user.id);
 }
 
 export async function updateSettings(raw: unknown) {
   const user = await requireUser();
-  void user;
-
   const input = settingsUpdateSchema.parse(raw) satisfies SettingsUpdateInput;
 
   const updated = await prisma.systemSetting.upsert({
-    where: { id: "singleton" },
+    where: { userId: user.id },
     update: {
       companyName: input.companyName,
       invoiceRegistrationNumber: input.invoiceRegistrationNumber ?? null,
@@ -44,7 +37,7 @@ export async function updateSettings(raw: unknown) {
       taxRate: input.taxRate,
     },
     create: {
-      id: "singleton",
+      userId: user.id,
       companyName: input.companyName,
       invoiceRegistrationNumber: input.invoiceRegistrationNumber ?? null,
       postalCode: input.postalCode ?? null,
@@ -68,4 +61,3 @@ export async function updateSettings(raw: unknown) {
   revalidatePath("/invoices/new");
   return updated;
 }
-

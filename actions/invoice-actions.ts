@@ -10,6 +10,7 @@ import { calculateInvoice } from "@/lib/invoice/calculateInvoice";
 import { generateInvoiceNumber } from "@/lib/invoice/generateInvoiceNumber";
 import { generateShareToken } from "@/lib/invoice/generateShareToken";
 import { INVOICE_NUMBER_CONFLICT_MESSAGE } from "@/lib/invoice/invoice-messages";
+import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { isUniqueOnInvoiceNumber } from "@/lib/prisma-errors";
 
 function toYenInt(value: number): number {
@@ -157,24 +158,15 @@ export async function getInvoice(params: { invoiceId: string }) {
 
 export async function getSystemSetting() {
   const user = await requireUser();
-  void user;
-
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-  });
-  if (!settings) throw new Error("SYSTEM_SETTING_NOT_FOUND");
-  return settings;
+  return getOrCreateSystemSetting(user.id);
 }
 
 export async function createInvoice(raw: unknown) {
   const user = await requireUser();
   const input = invoiceUpsertSchema.parse(raw) satisfies InvoiceUpsertInput;
 
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-    select: { taxRate: true },
-  });
-  const taxRateBps = settings?.taxRate ?? 1000;
+  const settings = await getOrCreateSystemSetting(user.id);
+  const taxRateBps = settings.taxRate;
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -240,11 +232,8 @@ export async function updateInvoice(params: { invoiceId: string; data: unknown }
   const user = await requireUser();
   const input = invoiceUpsertSchema.parse(params.data) satisfies InvoiceUpsertInput;
 
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-    select: { taxRate: true },
-  });
-  const taxRateBps = settings?.taxRate ?? 1000;
+  const settings = await getOrCreateSystemSetting(user.id);
+  const taxRateBps = settings.taxRate;
 
   return prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findFirst({
@@ -330,11 +319,8 @@ export async function saveInvoiceAutosave(params: { invoiceId?: string | null; d
 export async function duplicateInvoice(params: { invoiceId: string }): Promise<{ id: string }> {
   const user = await requireUser();
 
-  const settings = await prisma.systemSetting.findUnique({
-    where: { id: "singleton" },
-    select: { taxRate: true },
-  });
-  const taxRateBps = settings?.taxRate ?? 1000;
+  const settings = await getOrCreateSystemSetting(user.id);
+  const taxRateBps = settings.taxRate;
 
   try {
     return await prisma.$transaction(async (tx) => {
