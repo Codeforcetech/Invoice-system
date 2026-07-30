@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Resolver } from "react-hook-form";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -113,7 +113,7 @@ export function InvoiceForm(props: {
     mode: "onChange",
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -129,18 +129,76 @@ export function InvoiceForm(props: {
   const snapshot = useWatch({ control: form.control });
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 明細の自動計算（手修正行は除外）
-  useEffect(() => {
-    watchItems.forEach((row, idx) => {
-      if (!row) return;
-      if (row.amountManuallyEdited) return;
-      const autoAmount = toYenInt((row.quantity ?? 0) * (row.unitPrice ?? 0));
+  /** 手修正行以外は 金額 = 数量 × 単価。setValue のみ使い行の再マウントを避ける */
+  const recalcLineAmount = useCallback(
+    (idx: number) => {
+      const row = form.getValues(`items.${idx}`);
+      if (!row || row.amountManuallyEdited) return;
+      const q = Number(row.quantity);
+      const p = Number(row.unitPrice);
+      const quantity = Number.isFinite(q) ? q : 0;
+      const unitPrice = Number.isFinite(p) ? p : 0;
+      const autoAmount = toYenInt(quantity * unitPrice);
       if ((row.amount ?? 0) !== autoAmount) {
-        update(idx, { ...row, amount: autoAmount });
+        form.setValue(`items.${idx}.amount`, autoAmount, { shouldDirty: true, shouldValidate: true });
       }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchItems.map((r) => `${r.quantity}-${r.unitPrice}-${r.amountManuallyEdited}`).join("|")]);
+    },
+    [form],
+  );
+
+  const normalizeQuantityOnBlur = useCallback(
+    (idx: number) => {
+      const q = form.getValues(`items.${idx}.quantity`);
+      if (q === undefined || q === null || (typeof q === "number" && Number.isNaN(q))) {
+        form.setValue(`items.${idx}.quantity`, 0, { shouldDirty: true, shouldValidate: true });
+      }
+      recalcLineAmount(idx);
+    },
+    [form, recalcLineAmount],
+  );
+
+  /** Enter: 送信せず確定 → 品目 → 数量 → 単価 → 備考 → 次行 */
+  const ITEM_ENTER_FLOW = ["productName", "quantity", "unitPrice", "note"] as const;
+  type ItemEnterField = (typeof ITEM_ENTER_FLOW)[number] | "unit" | "amount";
+
+  const focusNextItemField = useCallback(
+    (idx: number, current: ItemEnterField) => {
+      // Enter 移動順上の「現在位置」（単位→数量へ、金額→備考へ）
+      const pos =
+        current === "productName" || current === "unit"
+          ? 0
+          : current === "quantity"
+            ? 1
+            : current === "unitPrice" || current === "amount"
+              ? 2
+              : 3;
+
+      let nextIdx = idx;
+      let nextPos = pos + 1;
+      if (nextPos >= ITEM_ENTER_FLOW.length) {
+        nextIdx = idx + 1;
+        nextPos = 0;
+      }
+      if (nextIdx >= fields.length) return;
+
+      const nextName = `items.${nextIdx}.${ITEM_ENTER_FLOW[nextPos]}`;
+      const el = document.querySelector<HTMLInputElement>(`input[name="${nextName}"]`);
+      el?.focus();
+      el?.select();
+    },
+    [fields.length],
+  );
+
+  const onItemFieldKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>, idx: number, field: ItemEnterField) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (field === "quantity") normalizeQuantityOnBlur(idx);
+      else if (field === "unitPrice") recalcLineAmount(idx);
+      focusNextItemField(idx, field);
+    },
+    [focusNextItemField, normalizeQuantityOnBlur, recalcLineAmount],
+  );
 
   const summary = useMemo(() => {
     return calculateInvoice({
@@ -441,17 +499,18 @@ export function InvoiceForm(props: {
               <button
                 type="button"
                 className="inline-flex flex-shrink-0 items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
-                onClick={() =>
+                onClick={() => {
+                  const unitPrice = lastUnitHint && lastUnitHint > 0 ? lastUnitHint : 0;
                   append({
                     productName: "",
                     unit: "",
                     quantity: 1,
-                    unitPrice: lastUnitHint && lastUnitHint > 0 ? lastUnitHint : 0,
-                    amount: 0,
+                    unitPrice,
+                    amount: toYenInt(1 * unitPrice),
                     amountManuallyEdited: false,
                     note: "",
-                  })
-                }
+                  });
+                }}
               >
                 ＋ 明細を追加
               </button>
@@ -494,19 +553,25 @@ export function InvoiceForm(props: {
                           <input
                             className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
                             {...form.register(`items.${idx}.productName` as const)}
+                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "productName")}
                           />
                         </td>
                         <td className="px-3 py-2 align-top">
                           <input
                             className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
                             {...form.register(`items.${idx}.unit` as const)}
+                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "unit")}
                           />
                         </td>
                         <td className="px-3 py-2 align-top text-right">
                           <input
                             inputMode="decimal"
                             className="ml-auto w-24 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                            {...form.register(`items.${idx}.quantity` as const, { valueAsNumber: true })}
+                            {...form.register(`items.${idx}.quantity` as const, {
+                              valueAsNumber: true,
+                              onBlur: () => normalizeQuantityOnBlur(idx),
+                            })}
+                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "quantity")}
                           />
                         </td>
                         <td className="px-3 py-2 align-top text-right">
@@ -515,12 +580,14 @@ export function InvoiceForm(props: {
                             name={`items.${idx}.unitPrice` as const}
                             render={({ field }) => (
                               <input
+                                name={field.name}
                                 inputMode="numeric"
                                 className="ml-auto w-32 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
                                 value={field.value ? field.value.toLocaleString("ja-JP") : ""}
                                 onChange={(e) => {
                                   const raw = e.target.value.replace(/,/g, "");
                                   if (!/^\d*$/.test(raw)) return;
+                                  // 入力中は空欄を許容（表示は空、値は 0 として保持）
                                   field.onChange(raw === "" ? 0 : Number(raw));
                                 }}
                                 onBlur={() => {
@@ -530,7 +597,9 @@ export function InvoiceForm(props: {
                                     /* ignore */
                                   }
                                   field.onBlur();
+                                  recalcLineAmount(idx);
                                 }}
+                                onKeyDown={(e) => onItemFieldKeyDown(e, idx, "unitPrice")}
                               />
                             )}
                           />
@@ -542,6 +611,7 @@ export function InvoiceForm(props: {
                             render={({ field }) => (
                               <div>
                                 <input
+                                  name={field.name}
                                   inputMode="numeric"
                                   className={[
                                     "ml-auto w-36 rounded-md border px-2 py-1.5 text-right tabular-nums focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15",
@@ -556,6 +626,7 @@ export function InvoiceForm(props: {
                                     form.setValue(`items.${idx}.amountManuallyEdited`, true, { shouldValidate: true });
                                   }}
                                   onBlur={field.onBlur}
+                                  onKeyDown={(e) => onItemFieldKeyDown(e, idx, "amount")}
                                 />
                                 <div className="mt-1 flex justify-end">
                                   {edited ? (
@@ -563,10 +634,8 @@ export function InvoiceForm(props: {
                                       type="button"
                                       className="text-xs font-medium text-amber-800 hover:underline"
                                       onClick={() => {
-                                        const q = Number(form.getValues(`items.${idx}.quantity`) ?? 0);
-                                        const p = Number(form.getValues(`items.${idx}.unitPrice`) ?? 0);
                                         form.setValue(`items.${idx}.amountManuallyEdited`, false, { shouldValidate: true });
-                                        form.setValue(`items.${idx}.amount`, toYenInt(q * p), { shouldValidate: true });
+                                        recalcLineAmount(idx);
                                       }}
                                     >
                                       自動計算に戻す
@@ -584,6 +653,7 @@ export function InvoiceForm(props: {
                           <input
                             className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
                             {...form.register(`items.${idx}.note` as const)}
+                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "note")}
                           />
                         </td>
                         <td className="px-3 py-2 align-top text-right">
