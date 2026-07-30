@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import type { Resolver } from "react-hook-form";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { settingsUpdateSchema, type SettingsUpdateInput } from "@/lib/validators/settings";
 import { updateSettings } from "@/actions/settings-actions";
 import { inputClass, labelClass, textareaClass } from "@/lib/ui/form-classes";
+import { StampImage } from "@/components/invoices/stamp-image";
 
 const sectionBox = "rounded-xl border border-slate-100 bg-slate-50/40 p-5 md:p-6";
 const sectionTitle = "text-base font-semibold text-slate-900";
@@ -22,6 +23,8 @@ export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
     defaultValues: props.initialValues,
     mode: "onChange",
   });
+
+  const stampImageUrlWatch = useWatch({ control: form.control, name: "stampImageUrl" });
 
   async function onSubmit(values: SettingsUpdateInput) {
     setSaving(true);
@@ -80,10 +83,23 @@ export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
 
           <div className="md:col-span-2">
             <label className={labelClass}>ハンコ画像URL</label>
-            <input className={`mt-1.5 ${inputClass}`} {...form.register("stampImageUrl")} />
-            <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-              画像の直リンク（.png / .jpg など）を推奨します。Google Drive の共有リンクも利用できますが、ファイルの共有設定が「リンクを知っている全員」になっている必要があります。表示できない場合は枠のみになります。
-            </p>
+            <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="min-w-0 flex-1">
+                <input className={inputClass} {...form.register("stampImageUrl")} />
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                  画像の直リンク（.png / .jpg など）を推奨します。Google Drive
+                  の共有リンクも利用できますが、共有設定を「リンクを知っている全員」にしてください。表示できない場合は枠のみになります。
+                </p>
+              </div>
+              <div className="flex flex-col items-start gap-1.5">
+                <span className="text-xs font-medium text-slate-500">プレビュー</span>
+                <StampImage
+                  url={stampImageUrlWatch}
+                  size={64}
+                  failLabel="画像を表示できません"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
