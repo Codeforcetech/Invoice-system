@@ -11,7 +11,7 @@ export default async function SettingsPage() {
     <PageShell>
       <SectionHeader
         variant="page"
-        title="設定"
+        title="自社情報・設定"
         description="請求書に表示される自社情報・振込先・税率を管理します。"
       />
 

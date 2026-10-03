@@ -54,9 +54,9 @@ export default async function AdminUsersPage(props: {
 
             <form className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
               <div className="min-w-0 flex-1">
-                <label className={labelClassXs}>検索</label>
+                <label htmlFor="filter-q" className={labelClassXs}>検索</label>
                 <input
-                  name="q"
+                  id="filter-q" name="q"
                   defaultValue={q}
                   className={`mt-1 ${inputClass}`}
                   placeholder="例) test@example.com / 山田"
@@ -71,7 +71,7 @@ export default async function AdminUsersPage(props: {
             </form>
 
             <DataTableShell>
-              <table className="w-full min-w-0 table-fixed border-collapse">
+              <table className="w-full min-w-[460px] table-fixed border-collapse">
                 <colgroup>
                   <col className="w-[22%]" />
                   <col className="w-[40%]" />

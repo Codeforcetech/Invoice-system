@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1e293b;
 }
 
 @theme inline {
@@ -12,17 +12,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
 }
 
 /* `border` のみ指定した要素が foreground で真っ黒に見えないよう、既定の枠色を薄くする */
@@ -32,4 +25,17 @@ body {
   textarea {
     border-color: rgb(226 232 240);
   }
+}
+
+@layer base {
+  :root { color-scheme: light; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), summary { cursor: pointer; }
+  :focus-visible { outline: 2px solid #0d9488; outline-offset: 3px; }
+  input, textarea, select { scroll-margin-block: 7rem; }
+  [id] { scroll-margin-top: 2rem; }
+}
+.app-workspace { --color-sky-50: #eff8f6; --color-sky-100: #daf0e9; --color-sky-400: #38b6a0; --color-sky-500: #149981; --color-sky-600: #087e6d; --color-sky-700: #086757; }
+@media (max-width: 640px) {
+  .app-workspace input:not([type=checkbox]):not([type=radio]), .app-workspace select, .app-workspace textarea { font-size: 16px; }
 }

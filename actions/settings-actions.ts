@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { isEmbeddedStamp } from "@/lib/invoice/resolveStampImageUrl";
+import { loadPdfStamp } from "@/lib/pdf/stamp";
 import { prisma } from "@/lib/db/prisma";
 import { requireUser } from "@/lib/auth/require-user";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
@@ -15,6 +17,8 @@ export async function getSettings() {
 export async function updateSettings(raw: unknown) {
   const user = await requireUser();
   const input = settingsUpdateSchema.parse(raw) satisfies SettingsUpdateInput;
+
+  if (input.stampImageUrl && isEmbeddedStamp(input.stampImageUrl)) await loadPdfStamp(input.stampImageUrl);
 
   const updated = await prisma.systemSetting.upsert({
     where: { userId: user.id },

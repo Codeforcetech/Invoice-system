@@ -1,13 +1,23 @@
 import { z } from "zod";
+import { isEmbeddedStamp } from "@/lib/invoice/resolveStampImageUrl";
 
 export const settingsUpdateSchema = z.object({
-  companyName: z.string().min(1, "自社名は必須です"),
-  invoiceRegistrationNumber: z.string().optional().nullable(),
-  postalCode: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  email: z.string().optional().nullable(),
-  contactPerson: z.string().optional().nullable(),
+  companyName: z.string().trim().min(1, "自社名は必須です").max(200),
+  invoiceRegistrationNumber: z.string().max(2000).optional().nullable(),
+  postalCode: z.string().max(2000).optional().nullable(),
+  address: z.string().max(2000).optional().nullable(),
+  phone: z.string().max(2000).optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .max(254)
+    .refine(
+      (v) => !v || z.email().safeParse(v).success,
+      "送信元のメールアドレスを確認してください",
+    )
+    .optional()
+    .nullable(),
+  contactPerson: z.string().max(2000).optional().nullable(),
   stampImageUrl: z
     .string()
     .optional()
@@ -15,6 +25,7 @@ export const settingsUpdateSchema = z.object({
     .refine(
       (v) => {
         if (v == null || v.trim() === "") return true;
+        if (isEmbeddedStamp(v)) return true;
         try {
           const u = new URL(v.trim());
           return u.protocol === "https:" || u.protocol === "http:";
@@ -22,17 +33,23 @@ export const settingsUpdateSchema = z.object({
           return false;
         }
       },
-      { message: "ハンコ画像URLは http(s) のURLを指定してください" },
+      {
+        message:
+          "画像ファイル（PNG/JPEG）または正しい http(s) URLを指定してください",
+      },
     ),
-  bankName: z.string().optional().nullable(),
-  branchName: z.string().optional().nullable(),
-  accountType: z.string().optional().nullable(),
-  accountNumber: z.string().optional().nullable(),
-  accountHolder: z.string().optional().nullable(),
-  accountHolderKana: z.string().optional().nullable(),
-  transferNote: z.string().optional().nullable(),
-  taxRate: z.coerce.number().int().min(0, "消費税率は0以上で入力してください"), // bps（例:10%=>1000）
+  bankName: z.string().max(2000).optional().nullable(),
+  branchName: z.string().max(2000).optional().nullable(),
+  accountType: z.string().max(2000).optional().nullable(),
+  accountNumber: z.string().max(2000).optional().nullable(),
+  accountHolder: z.string().max(2000).optional().nullable(),
+  accountHolderKana: z.string().max(2000).optional().nullable(),
+  transferNote: z.string().max(2000).optional().nullable(),
+  taxRate: z.coerce
+    .number()
+    .int()
+    .min(0, "消費税率は0以上で入力してください")
+    .max(10000, "消費税率は100%以下で入力してください"), // bps（例:10%=>1000）
 });
 
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;
-

@@ -3,7 +3,12 @@ import Link from "next/link";
 import { listCompanies } from "@/actions/company-actions";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
-import { DataTableShell, dataTableCell, dataTableHeadCell, dataTableRow } from "@/components/ui/data-table";
+import {
+  DataTableShell,
+  dataTableCell,
+  dataTableHeadCell,
+  dataTableRow,
+} from "@/components/ui/data-table";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { inputClass, labelClassXs } from "@/lib/ui/form-classes";
@@ -25,17 +30,22 @@ export default async function CompaniesPage(props: {
     <PageShell>
       <SectionHeader
         variant="page"
-        title="会社一覧"
-        description="自分が所有する会社のみ表示されます。"
-        action={<AppButtonLink href="/companies/new">新規追加</AppButtonLink>}
+        title="取引先"
+        description="請求先の情報・送付先メール・支払条件をまとめて管理します。"
+        action={
+          <AppButtonLink href="/companies/new">＋ 取引先を追加</AppButtonLink>
+        }
       />
 
       <Card>
         <CardSection className="!p-4 sm:!p-6">
           <form className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-3">
             <div className="min-w-0 flex-1">
-              <label className={labelClassXs}>会社名検索</label>
+              <label htmlFor="filter-q" className={labelClassXs}>
+                会社名検索
+              </label>
               <input
+                id="filter-q"
                 name="q"
                 defaultValue={q}
                 className={`mt-1 ${inputClass}`}
@@ -57,14 +67,51 @@ export default async function CompaniesPage(props: {
         </CardSection>
       </Card>
 
-      <DataTableShell>
+      <div className="space-y-3 sm:hidden">
+        {companies.map((c) => (
+          <article
+            key={c.id}
+            className="rounded-2xl border border-slate-200 bg-white p-5"
+          >
+            <Link
+              href={`/companies/${c.id}`}
+              className="text-sm font-semibold text-slate-900"
+            >
+              {c.name}
+            </Link>
+            <p className="mt-2 text-xs text-slate-500">
+              会社コード：{c.invoiceCode}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <Link
+                href={`/companies/${c.id}`}
+                className="text-xs font-medium text-sky-700"
+              >
+                詳細・編集
+              </Link>
+              <Link
+                href={`/invoices/new?companyId=${c.id}`}
+                className="text-xs font-medium text-sky-700"
+              >
+                請求書を作成 →
+              </Link>
+            </div>
+          </article>
+        ))}
+        {companies.length === 0 && (
+          <p className="rounded-xl bg-white p-6 text-sm text-slate-500">
+            該当する取引先がありません。
+          </p>
+        )}
+      </div>
+      <DataTableShell className="hidden sm:block">
         <table className="w-full min-w-0 table-fixed border-collapse">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/90">
-              <th className={`${dataTableHeadCell} w-[32%]`}>会社名</th>
-              <th className={`${dataTableHeadCell} w-[22%]`}>会社コード</th>
-              <th className={`${dataTableHeadCell} w-[24%]`}>作成日</th>
-              <th className={`${dataTableHeadCell} w-[22%] text-right`}></th>
+              <th className={`${dataTableHeadCell} w-[38%]`}>会社名</th>
+              <th className={`${dataTableHeadCell} w-[16%]`}>会社コード</th>
+              <th className={`${dataTableHeadCell} w-[18%]`}>作成日</th>
+              <th className={`${dataTableHeadCell} w-[28%] text-right`}></th>
             </tr>
           </thead>
           <tbody>
@@ -73,24 +120,39 @@ export default async function CompaniesPage(props: {
                 <td className={`${dataTableCell} truncate`} title={c.name}>
                   {c.name}
                 </td>
-                <td className={`${dataTableCell} font-mono text-xs text-slate-600`}>{c.invoiceCode}</td>
+                <td
+                  className={`${dataTableCell} font-mono text-xs text-slate-600`}
+                >
+                  {c.invoiceCode}
+                </td>
                 <td className={`${dataTableCell} tabular-nums text-slate-600`}>
                   {new Date(c.createdAt).toLocaleDateString("ja-JP")}
                 </td>
                 <td className={`${dataTableCell} text-right`}>
-                  <Link
-                    href={`/companies/${c.id}`}
-                    className="text-sm font-medium text-sky-600 hover:text-sky-700 hover:underline"
-                  >
-                    詳細
-                  </Link>
+                  <div className="flex flex-wrap justify-end gap-4">
+                    <Link
+                      href={`/invoices/new?companyId=${c.id}`}
+                      className="text-xs font-medium text-sky-700 hover:underline"
+                    >
+                      請求書を作成
+                    </Link>
+                    <Link
+                      href={`/companies/${c.id}`}
+                      className="text-sm font-medium text-sky-600 hover:text-sky-700 hover:underline"
+                    >
+                      詳細・編集
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
             {companies.length === 0 && (
               <tr>
-                <td className="px-4 py-14 text-center text-sm text-slate-500" colSpan={4}>
-                  会社がありません。「新規追加」から作成してください。
+                <td
+                  className="px-4 py-14 text-center text-sm text-slate-500"
+                  colSpan={4}
+                >
+                  取引先がありません。「取引先を追加」から登録してください。
                 </td>
               </tr>
             )}

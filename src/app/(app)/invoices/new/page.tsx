@@ -44,21 +44,22 @@ export default async function NewInvoicePage(props: {
   }));
 
   return (
-    <PageShell maxWidth="7xl">
+    <PageShell maxWidth="full">
       <SectionHeader
         variant="page"
         title="請求書作成"
-        description="左で入力、右で金額を確認。下書きは自動保存されます。"
+        description="入力しながら完成形を確認。請求書の作成から発行まで、この画面で。"
       />
 
       <InvoiceForm
+        settings={settings}
         companies={companies}
         itemTemplates={itemTemplates}
         mailTemplates={mailTemplates}
         defaultTaxRateBps={settings.taxRate}
         mode="create"
         initialValues={{
-          companyId: companyIdFromQuery || companies[0]?.id || "",
+          companyId: companyIdFromQuery || "",
         }}
       />
     </PageShell>

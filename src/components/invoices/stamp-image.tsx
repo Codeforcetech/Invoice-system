@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { resolveStampImageUrl } from "@/lib/invoice/resolveStampImageUrl";
 
@@ -39,12 +39,8 @@ export function StampImage(props: StampImageProps) {
   const resolved = resolveStampImageUrl(raw);
   const size = props.size ?? 64;
   const alt = props.alt ?? "印影";
-  const [failed, setFailed] = useState(false);
-
-  // URL 変更時は失敗状態をリセット（同じ壊れた URL の再設定ループは起こさない）
-  useEffect(() => {
-    setFailed(false);
-  }, [resolved]);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = resolved !== null && failedUrl === resolved;
 
   if (!resolved || failed) {
     return (
@@ -75,7 +71,7 @@ export function StampImage(props: StampImageProps) {
           if (process.env.NODE_ENV === "development") {
             console.warn("[StampImage] failed to load stamp image");
           }
-          setFailed(true);
+          setFailedUrl(resolved);
         }}
       />
     </div>

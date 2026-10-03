@@ -1,12 +1,11 @@
 import Link from "next/link";
 
 import type { InvoiceWithItems } from "@/actions/invoice-actions";
-import type { InvoiceForShare } from "@/actions/invoice-share-actions";
 import { PrintButton } from "@/app/(app)/invoices/_components/print-button";
 import { StampImage } from "@/components/invoices/stamp-image";
 import { SuppressBrowserPrintHeaders } from "@/components/invoices/suppress-browser-print-headers";
 
-type SystemSettings = {
+export type InvoicePrintSettings = {
   companyName: string;
   invoiceRegistrationNumber: string | null;
   postalCode: string | null;
@@ -29,13 +28,38 @@ function yen(n: number) {
 
 function fmtDate(d: Date) {
   const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "—";
   const y = dt.getFullYear();
   const m = String(dt.getMonth() + 1).padStart(2, "0");
   const day = String(dt.getDate()).padStart(2, "0");
   return `${y}年${m}月${day}日`;
 }
 
-function itemLabel(it: InvoiceWithItems["items"][number] | InvoiceForShare["items"][number]) {
+export type InvoiceDocument = Pick<
+  InvoiceWithItems,
+  | "id"
+  | "invoiceNumber"
+  | "subject"
+  | "issueDate"
+  | "dueDate"
+  | "taxRate"
+  | "subtotal"
+  | "taxAmount"
+  | "totalWithTax"
+  | "withholdingEnabled"
+  | "withholdingTax"
+  | "grandTotal"
+> & {
+  company: Pick<InvoiceWithItems["company"], "name" | "paymentTerms">;
+  items: Array<
+    Pick<
+      InvoiceWithItems["items"][number],
+      "id" | "productName" | "unit" | "unitPrice" | "amount" | "note"
+    > & { quantity: number | InvoiceWithItems["items"][number]["quantity"] }
+  >;
+};
+
+function itemLabel(it: InvoiceDocument["items"][number]) {
   let name = it.productName;
   if (it.unit) name += `（${it.unit}）`;
   return name;
@@ -45,11 +69,15 @@ function formatWithholding(amount: number) {
   return `-${yen(amount)}`;
 }
 
-function bankLines(settings: SystemSettings): string[] {
+function bankLines(settings: InvoicePrintSettings): string[] {
   const lines: string[] = [];
-  const bankBranch = [settings.bankName, settings.branchName].filter(Boolean).join(" ");
+  const bankBranch = [settings.bankName, settings.branchName]
+    .filter(Boolean)
+    .join(" ");
   if (bankBranch) lines.push(bankBranch);
-  const account = [settings.accountType, settings.accountNumber].filter(Boolean).join(" ");
+  const account = [settings.accountType, settings.accountNumber]
+    .filter(Boolean)
+    .join(" ");
   if (account) lines.push(account);
   if (settings.accountHolder) lines.push(settings.accountHolder);
   return lines;
@@ -82,28 +110,37 @@ const PRINT_CSS = `
 `;
 
 export function InvoicePrintView(props: {
-  invoice: InvoiceWithItems | InvoiceForShare;
-  settings: SystemSettings;
+  invoice: InvoiceDocument;
+  settings: InvoicePrintSettings;
   embed?: boolean;
+  /** 入力画面内では印刷用のグローバルスタイルやタイトル変更を行わない */
+  live?: boolean;
   /** ログイン不要の共有ページ（戻るリンクなし・印刷のみ） */
   publicShare?: boolean;
 }) {
   const { invoice, settings, embed, publicShare } = props;
   const taxRatePercent = invoice.taxRate / 100;
-  const showWithholding = invoice.withholdingEnabled && invoice.withholdingTax > 0;
-  const remarks = [invoice.company.paymentTerms, settings.transferNote].filter(Boolean).join("\n\n");
+  const showWithholding =
+    invoice.withholdingEnabled && invoice.withholdingTax > 0;
+  const remarks = [invoice.company.paymentTerms, settings.transferNote]
+    .filter(Boolean)
+    .join("\n\n");
   const banks = bankLines(settings);
 
   return (
     <div
-          className={`invoice-print-outer ${
-            embed || publicShare
-              ? "bg-white"
-              : "min-h-screen bg-slate-100 py-8 print:bg-white print:py-0"
-          }`}
+      className={`invoice-print-outer ${
+        embed || publicShare
+          ? "bg-white"
+          : "min-h-screen bg-slate-100 py-8 print:bg-white print:py-0"
+      }`}
     >
-      <style>{PRINT_CSS}</style>
-      <SuppressBrowserPrintHeaders />
+      {!props.live && (
+        <>
+          <style>{PRINT_CSS}</style>
+          <SuppressBrowserPrintHeaders />
+        </>
+      )}
       <div aria-hidden className="invoice-print-mask-top hidden" />
       <div aria-hidden className="invoice-print-mask-bottom hidden" />
 
@@ -133,7 +170,7 @@ export function InvoicePrintView(props: {
         }
       >
         <div
-          className={`invoice-print-pad text-[13px] leading-normal text-zinc-900 ${
+          className={`invoice-print-pad text-[13px] leading-normal break-words text-zinc-900 ${
             embed ? "px-9 py-8 sm:px-10 sm:py-9" : "px-10 py-8"
           }`}
         >
@@ -158,7 +195,9 @@ export function InvoicePrintView(props: {
             <div className="w-[48%] shrink-0 text-[12px] leading-normal">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-0.5">
-                  <p className="text-[14px] font-bold text-zinc-900">{settings.companyName}</p>
+                  <p className="text-[14px] font-bold text-zinc-900">
+                    {settings.companyName}
+                  </p>
                   {settings.postalCode || settings.address ? (
                     <p>
                       {settings.postalCode ? `〒${settings.postalCode} ` : ""}
@@ -167,9 +206,13 @@ export function InvoicePrintView(props: {
                   ) : null}
                   {settings.phone ? <p>TEL: {settings.phone}</p> : null}
                   {settings.email ? <p>{settings.email}</p> : null}
-                  {settings.contactPerson ? <p>{settings.contactPerson}</p> : null}
+                  {settings.contactPerson ? (
+                    <p>{settings.contactPerson}</p>
+                  ) : null}
                   {settings.invoiceRegistrationNumber ? (
-                    <p className="text-zinc-600">登録番号: {settings.invoiceRegistrationNumber}</p>
+                    <p className="text-zinc-600">
+                      登録番号: {settings.invoiceRegistrationNumber}
+                    </p>
                   ) : null}
                 </div>
                 <div className="shrink-0">
@@ -179,15 +222,21 @@ export function InvoicePrintView(props: {
 
               <dl className="mt-4 space-y-1 border-t border-zinc-200 pt-3">
                 <div className="flex gap-3">
-                  <dt className="w-[6.5rem] shrink-0 text-zinc-500">請求書番号</dt>
-                  <dd className="min-w-0 break-all font-medium text-zinc-900">{invoice.invoiceNumber}</dd>
+                  <dt className="w-[6.5rem] shrink-0 text-zinc-500">
+                    請求書番号
+                  </dt>
+                  <dd className="min-w-0 break-all font-medium text-zinc-900">
+                    {invoice.invoiceNumber}
+                  </dd>
                 </div>
                 <div className="flex gap-3">
                   <dt className="w-[6.5rem] shrink-0 text-zinc-500">請求日</dt>
                   <dd>{fmtDate(invoice.issueDate)}</dd>
                 </div>
                 <div className="flex gap-3">
-                  <dt className="w-[6.5rem] shrink-0 text-zinc-500">お支払期限</dt>
+                  <dt className="w-[6.5rem] shrink-0 text-zinc-500">
+                    お支払期限
+                  </dt>
                   <dd>{fmtDate(invoice.dueDate)}</dd>
                 </div>
               </dl>
@@ -197,19 +246,27 @@ export function InvoicePrintView(props: {
           {/* ご請求金額 */}
           <div className="mb-1.5 mt-1">
             <span className="text-[14px] text-zinc-800">ご請求金額 </span>
-            <span className="text-[20px] font-bold tabular-nums">{yen(invoice.grandTotal)}</span>
+            <span className="text-[20px] font-bold tabular-nums">
+              {yen(invoice.grandTotal)}
+            </span>
             <span className="text-[14px] text-zinc-800"> 円</span>
           </div>
           <hr className="mb-5 border-zinc-800" />
 
           {/* 明細テーブル */}
-          <table className="w-full border-collapse text-[13px]">
+          <table className="w-full table-fixed border-collapse text-[13px]">
             <thead>
               <tr className="border-b-2 border-zinc-800 text-zinc-700">
                 <th className="py-2 pr-4 text-left font-semibold">品目</th>
-                <th className="w-[5.5rem] py-2 pr-3 text-right font-semibold">単価</th>
-                <th className="w-[3.5rem] py-2 pr-3 text-right font-semibold">数量</th>
-                <th className="w-[6.5rem] py-2 text-right font-semibold">価格</th>
+                <th className="w-[5.5rem] py-2 pr-3 text-right font-semibold">
+                  単価
+                </th>
+                <th className="w-[3.5rem] py-2 pr-3 text-right font-semibold">
+                  数量
+                </th>
+                <th className="w-[6.5rem] py-2 text-right font-semibold">
+                  価格
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -220,11 +277,21 @@ export function InvoicePrintView(props: {
                 >
                   <td className="py-2.5 pr-4 align-top">
                     <div>{itemLabel(it)}</div>
-                    {it.note ? <div className="mt-0.5 text-[12px] text-zinc-500">{it.note}</div> : null}
+                    {it.note ? (
+                      <div className="mt-0.5 text-[12px] text-zinc-500">
+                        {it.note}
+                      </div>
+                    ) : null}
                   </td>
-                  <td className="py-2.5 pr-3 text-right align-top tabular-nums">{yen(it.unitPrice)}</td>
-                  <td className="py-2.5 pr-3 text-right align-top tabular-nums">{String(it.quantity)}</td>
-                  <td className="py-2.5 text-right align-top tabular-nums">{yen(it.amount)}</td>
+                  <td className="py-2.5 pr-3 text-right align-top tabular-nums">
+                    {yen(it.unitPrice)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right align-top tabular-nums">
+                    {String(it.quantity)}
+                  </td>
+                  <td className="py-2.5 text-right align-top tabular-nums">
+                    {yen(it.amount)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -233,24 +300,38 @@ export function InvoicePrintView(props: {
           {/* 税率別内訳（左）・集計（右） */}
           <div className="mt-4 flex items-start justify-between gap-6">
             <div className="min-w-0 flex-1">
-              <p className="mb-2 text-[13px] font-semibold text-zinc-800">税率別内訳</p>
+              <p className="mb-2 text-[13px] font-semibold text-zinc-800">
+                税率別内訳
+              </p>
               <table className="w-full max-w-[340px] border-collapse text-[12px]">
                 <thead>
                   <tr className="border-b border-zinc-400 text-zinc-700">
                     <th className="w-10 py-1.5 pr-2 text-left font-medium" />
-                    <th className="border-l border-zinc-300 py-1.5 px-2 text-right font-medium">税抜金額</th>
-                    <th className="py-1.5 px-2 text-right font-medium">消費税額</th>
-                    <th className="py-1.5 pl-2 text-right font-medium">税込金額</th>
+                    <th className="border-l border-zinc-300 py-1.5 px-2 text-right font-medium">
+                      税抜金額
+                    </th>
+                    <th className="py-1.5 px-2 text-right font-medium">
+                      消費税額
+                    </th>
+                    <th className="py-1.5 pl-2 text-right font-medium">
+                      税込金額
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-zinc-300">
-                    <td className="py-1.5 pr-2 tabular-nums">{taxRatePercent}%</td>
+                    <td className="py-1.5 pr-2 tabular-nums">
+                      {taxRatePercent}%
+                    </td>
                     <td className="border-l border-zinc-300 py-1.5 px-2 text-right tabular-nums">
                       {yen(invoice.subtotal)}
                     </td>
-                    <td className="py-1.5 px-2 text-right tabular-nums">{yen(invoice.taxAmount)}</td>
-                    <td className="py-1.5 pl-2 text-right tabular-nums">{yen(invoice.totalWithTax)}</td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
+                      {yen(invoice.taxAmount)}
+                    </td>
+                    <td className="py-1.5 pl-2 text-right tabular-nums">
+                      {yen(invoice.totalWithTax)}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -269,11 +350,15 @@ export function InvoicePrintView(props: {
                 <>
                   <div className="flex justify-between border-b border-zinc-300 py-1.5">
                     <span className="text-zinc-700">税込合計</span>
-                    <span className="tabular-nums">{yen(invoice.totalWithTax)}</span>
+                    <span className="tabular-nums">
+                      {yen(invoice.totalWithTax)}
+                    </span>
                   </div>
                   <div className="flex justify-between border-b border-zinc-300 py-1.5">
                     <span className="text-zinc-700">源泉徴収税額</span>
-                    <span className="tabular-nums">{formatWithholding(invoice.withholdingTax)}</span>
+                    <span className="tabular-nums">
+                      {formatWithholding(invoice.withholdingTax)}
+                    </span>
                   </div>
                 </>
               ) : null}
@@ -287,7 +372,9 @@ export function InvoicePrintView(props: {
           {/* 振込先・備考 */}
           <div className="mt-8 grid max-w-[75%] grid-cols-1 gap-5">
             <div>
-              <p className="mb-1.5 text-[13px] font-semibold text-zinc-800">振込先</p>
+              <p className="mb-1.5 text-[13px] font-semibold text-zinc-800">
+                振込先
+              </p>
               <div className="min-h-[3rem] rounded border border-zinc-300 px-3.5 py-2 text-[13px] leading-normal text-zinc-800">
                 {banks.length > 0 ? (
                   <div className="space-y-0.5">
@@ -301,7 +388,9 @@ export function InvoicePrintView(props: {
               </div>
             </div>
             <div>
-              <p className="mb-1.5 text-[13px] font-semibold text-zinc-800">備考</p>
+              <p className="mb-1.5 text-[13px] font-semibold text-zinc-800">
+                備考
+              </p>
               <div className="min-h-[3rem] whitespace-pre-wrap rounded border border-zinc-300 px-3.5 py-2 text-[13px] leading-normal text-zinc-800">
                 {remarks || "—"}
               </div>

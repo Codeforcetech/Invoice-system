@@ -52,7 +52,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!token) return null;
 
   try {
-    const { payload } = await jwtVerify(token, getSecretKey());
+    const { payload } = await jwtVerify(token, getSecretKey(), { algorithms: ["HS256"] });
     const sub = payload.sub;
     const role = payload.role;
     if (typeof sub !== "string") return null;

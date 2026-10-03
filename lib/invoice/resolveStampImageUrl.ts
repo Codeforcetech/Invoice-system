@@ -1,62 +1,50 @@
-/**
- * 設定に保存されたハンコ画像 URL を帳票表示用に正規化する。
- *
- * Google Drive の共有リンク（/file/d/...）や旧式の uc?export=view は、
- * ブラウザの <img> から cross-site で読むと 403 になる（2024年以降の仕様変更）。
- * 埋め込み可能な lh3.googleusercontent.com 直リンクへ変換する。
- */
-const DRIVE_HOST = /(?:^|\.)(?:drive\.google\.com|docs\.google\.com)$/i;
-
-function isHttpUrl(value: string): boolean {
-  try {
-    const u = new URL(value);
-    return u.protocol === "https:" || u.protocol === "http:";
-  } catch {
-    return false;
-  }
+/** Raster-only embedded stamps can be rendered without contacting an external host. */
+export function isEmbeddedStamp(value: string) {
+  return (
+    value.length <= 700000 &&
+    /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)
+  );
 }
-
-/** Google Drive 共有URL・uc・open・lh3 等からファイル ID を抽出 */
 export function extractGoogleDriveFileId(raw: string): string | null {
-  const url = raw.trim();
-  if (!url) return null;
-
-  const fromFilePath = url.match(/\/file\/d\/([^/?#]+)/)?.[1];
-  if (fromFilePath) return fromFilePath;
-
-  const fromLh3 = url.match(/googleusercontent\.com\/d\/([^/=?#]+)/)?.[1];
-  if (fromLh3) return fromLh3;
-
   try {
-    const u = new URL(url);
-    const hostOk =
-      DRIVE_HOST.test(u.hostname) ||
-      u.hostname.includes("googleusercontent.com") ||
-      u.hostname === "drive.usercontent.google.com";
-    if (hostOk) {
-      const id = u.searchParams.get("id");
-      if (id) return id;
-    }
+    const url = new URL(raw.trim());
+    if (url.protocol !== "https:" || url.username || url.password || url.port)
+      return null;
+    let id: string | null = null;
+    if (
+      [
+        "drive.google.com",
+        "docs.google.com",
+        "drive.usercontent.google.com",
+      ].includes(url.hostname)
+    )
+      id =
+        url.pathname.match(/^\/file\/d\/([A-Za-z0-9_-]+)(?:\/|$)/)?.[1] ??
+        url.searchParams.get("id");
+    if (url.hostname === "lh3.googleusercontent.com")
+      id = url.pathname.match(/^\/d\/([A-Za-z0-9_-]+)(?:=|$)/)?.[1] ?? null;
+    return id && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
   } catch {
-    /* fall through */
+    return null;
   }
-
-  const fromQuery = url.match(/[?&]id=([^&]+)/)?.[1];
-  return fromQuery ? decodeURIComponent(fromQuery) : null;
 }
-
-/** 帳票の印影表示用（小さめでも印刷で潰れにくいサイズ） */
-function toDriveEmbedUrl(fileId: string): string {
-  return `https://lh3.googleusercontent.com/d/${fileId}=s400`;
-}
-
-export function resolveStampImageUrl(raw: string | null | undefined): string | null {
-  const url = raw?.trim();
-  if (!url) return null;
-  if (!isHttpUrl(url)) return null;
-
-  const fileId = extractGoogleDriveFileId(url);
-  if (fileId) return toDriveEmbedUrl(fileId);
-
-  return url;
+export function resolveStampImageUrl(
+  raw: string | null | undefined,
+): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  if (isEmbeddedStamp(value)) return value;
+  try {
+    const url = new URL(value);
+    if (
+      !["https:", "http:"].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
+      return null;
+    const id = extractGoogleDriveFileId(value);
+    return id ? `https://lh3.googleusercontent.com/d/${id}=s400` : url.href;
+  } catch {
+    return null;
+  }
 }

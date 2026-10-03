@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { printWithBlankTitle } from "@/components/invoices/suppress-browser-print-headers";
 
@@ -48,15 +54,22 @@ function ToolbarAction(props: {
   );
 }
 
-export function InvoicePreviewModal(props: {
+type PreviewProps = {
   open: boolean;
   invoiceId: string | null;
   onClose: () => void;
-}) {
+};
+export function InvoicePreviewModal(props: PreviewProps) {
+  return props.open ? <PreviewDialog {...props} /> : null;
+}
+function PreviewDialog(props: PreviewProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
 
-  const src = props.invoiceId ? `/invoices/${props.invoiceId}/print?embed=1` : "";
+  const src = props.invoiceId
+    ? `/invoices/${props.invoiceId}/print?embed=1`
+    : "";
 
   const runPrint = useCallback(() => {
     const win = iframeRef.current?.contentWindow;
@@ -79,36 +92,43 @@ export function InvoicePreviewModal(props: {
   }, []);
 
   useEffect(() => {
-    if (!props.open) {
-      setIframeReady(false);
-      return;
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+    const trigger = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      if (trigger?.isConnected) trigger.focus();
+      document.body.style.overflow = previous;
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [props.open, props]);
-
-  useEffect(() => {
-    if (props.open) {
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = "";
-      };
-    }
-  }, [props.open]);
+  }, []);
 
   if (!props.open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-500/40 print:hidden">
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="invoice-preview-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        props.onClose();
+      }}
+      className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 p-0 open:flex open:flex-col bg-slate-200 print:hidden"
+    >
       {/* ツールバー（印刷プレビュー風） */}
       <header className="shrink-0 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-900">プレビュー / 印刷</h2>
-            <p className="mt-0.5 text-xs text-slate-500">帳票の確認、PDF保存、印刷はここから行えます</p>
+            <h2
+              id="invoice-preview-title"
+              className="text-sm font-semibold text-slate-900"
+            >
+              プレビュー / 印刷
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              帳票の確認、PDF保存、印刷はここから行えます
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ToolbarAction
@@ -154,7 +174,9 @@ export function InvoicePreviewModal(props: {
                 ref={iframeRef}
                 title="invoice-preview"
                 className={`block w-full bg-white ${iframeReady ? "" : "h-0 overflow-hidden"}`}
-                style={iframeReady ? { minHeight: "min(297mm, 75vh)" } : undefined}
+                style={
+                  iframeReady ? { minHeight: "min(297mm, 75vh)" } : undefined
+                }
                 src={src}
                 onLoad={() => {
                   syncIframeHeight();
@@ -169,6 +191,6 @@ export function InvoicePreviewModal(props: {
           </div>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

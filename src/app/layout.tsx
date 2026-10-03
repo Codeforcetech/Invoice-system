@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "請求書作成システム",
+  title: { default: "SEIQ | 請求・売上・支払管理", template: "%s | SEIQ" },
   description: "請求書の作成・管理・帳票出力",
 };
 

@@ -13,14 +13,14 @@ export default async function CompanyDetailPage(props: { params: Promise<{ compa
     <PageShell maxWidth="4xl">
       <SectionHeader
         variant="page"
-        title="会社詳細"
+        title="取引先の詳細"
         description="取引先の情報を確認・編集します。"
         action={
           <>
             <AppButtonLink href="/companies" variant="secondary">
               一覧へ
             </AppButtonLink>
-            <AppButtonLink href={`/invoices/new?companyId=${company.id}`}>この会社で請求書作成</AppButtonLink>
+            <AppButtonLink href={`/invoices/new?companyId=${company.id}`}>この取引先の請求書を作成</AppButtonLink>
           </>
         }
       />

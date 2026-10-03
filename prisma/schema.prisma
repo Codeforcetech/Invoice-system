@@ -8,18 +8,96 @@ datasource db {
 }
 
 model User {
-  id            String                @id @default(cuid())
-  name          String
-  email         String                @unique
-  passwordHash  String
-  role          UserRole              @default(USER)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  companies     Company[]
-  invoices      Invoice[]             @relation("UserInvoices")
-  itemTemplates InvoiceItemTemplate[]
-  mailTemplates MailTemplate[]
-  systemSetting SystemSetting?
+  id                     String                  @id @default(cuid())
+  name                   String
+  email                  String                  @unique
+  passwordHash           String
+  role                   UserRole                @default(USER)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  companies              Company[]
+  invoices               Invoice[]               @relation("UserInvoices")
+  itemTemplates          InvoiceItemTemplate[]
+  mailTemplates          MailTemplate[]
+  systemSetting          SystemSetting?
+  expenses               Expense[]
+  accounting             AccountingSetting?
+  accounts               Account[]
+  journals               JournalEntry[]
+  feeds                  StatementFeed[]
+  claimWorkspace         ClaimWorkspace?         @relation("ClaimOwner")
+  claimMemberships       ClaimMember[]
+  claimsSubmitted        ExpenseClaim[]          @relation("ClaimApplicant")
+  claimEvents            ClaimEvent[]
+  notifications          AppNotification[]
+  notificationPreference NotificationPreference?
+  fixedAssets            FixedAsset[]
+  reportAnnotations      ReportAnnotation[]
+}
+
+// Reporting metadata; source records and accounting amounts are never changed.
+model ReportAnnotation {
+  userId String
+  targetType String
+  targetId String
+  department String @default("")
+  office String @default("")
+  plannedDate DateTime? @db.Date
+  bankCode String @default("")
+  branchCode String @default("")
+  bankAccountType String @default("")
+  bankAccountNumber String @default("")
+  bankAccountHolder String @default("")
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, targetType, targetId])
+  @@index([userId, department, office])
+}
+
+model FixedAsset {
+  id String @id
+  userId String
+  name String
+  acquiredDate DateTime @db.Date
+  serviceDate DateTime @db.Date
+  cost Int
+  usefulLife Int
+  method String
+  fiscalStartMonth Int @default(1)
+  assetAccountId String
+  expenseAccountId String
+  note String @default("")
+  archived Boolean @default(false)
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetAccount Account @relation("FixedAssetAccount", fields: [userId, assetAccountId], references: [userId, id])
+  expenseAccount Account @relation("DepreciationAccount", fields: [userId, expenseAccountId], references: [userId, id])
+  postings DepreciationPosting[]
+
+  @@unique([userId, id])
+  @@index([userId, archived, createdAt])
+}
+
+model DepreciationPosting {
+  id String @id @default(cuid())
+  userId String
+  assetId String
+  entryId String
+  month String
+  amount Int
+  active Boolean @default(true)
+  canceledReason String?
+  canceledAt DateTime?
+  createdAt DateTime @default(now())
+  asset FixedAsset @relation(fields: [userId, assetId], references: [userId, id])
+  entry JournalEntry @relation(fields: [userId, entryId], references: [userId, id])
+
+  @@unique([assetId, month, entryId])
+  @@index([userId, assetId, active, month])
 }
 
 model Company {
@@ -57,6 +135,10 @@ model Invoice {
   withholdingTax     Int
   grandTotal         Int
   status             InvoiceStatus @default(DRAFT)
+  receivedDate       DateTime?     @db.Date
+  receiptMatchId     String?
+  mergedIntoId       String?
+  recurringKey       String?       @unique
   createdById        String
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -170,4 +252,286 @@ enum InvoiceStatus {
   DRAFT
   CONFIRMED
   ISSUED
+}
+
+model Expense {
+  id          String             @id @default(cuid())
+  userId      String
+  supplier    String
+  description String
+  category    String
+  amount      Int
+  costMonth   String
+  dueDate     DateTime           @db.Date
+  paidDate    DateTime?          @db.Date
+  note        String             @default("")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment  ExpenseAttachment?
+
+  @@index([userId, costMonth])
+  @@index([userId, paidDate, dueDate])
+}
+
+model ExpenseAttachment {
+  expenseId String  @id
+  filename  String
+  data      Bytes
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+}
+
+model AccountingSetting {
+  userId    String   @id
+  startDate DateTime @db.Date
+  industry  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id     String          @id @default(cuid())
+  userId String
+  code   String
+  name   String
+  kind   String
+  active Boolean         @default(true)
+  system Boolean         @default(false)
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines  JournalLine[]
+  feeds  StatementFeed[]
+  rules  StatementRule[]
+  assetAccounts FixedAsset[] @relation("FixedAssetAccount")
+  depreciationAccounts FixedAsset[] @relation("DepreciationAccount")
+
+  @@unique([userId, code])
+  @@unique([userId, id])
+}
+
+model JournalEntry {
+  id         String        @id @default(cuid())
+  userId     String
+  requestKey String
+  date       DateTime      @db.Date
+  memo       String
+  source     String        @default("MANUAL")
+  sourceId   String?
+  reversalOf String?       @unique
+  createdAt  DateTime      @default(now())
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines      JournalLine[]
+
+  statementRows StatementRow[]
+  expenseClaims ExpenseClaim[] @relation("ClaimPosting")
+  paidClaims    ExpenseClaim[] @relation("ClaimPayment")
+  depreciationPostings DepreciationPosting[]
+
+  @@unique([userId, requestKey])
+  @@unique([userId, id])
+  @@index([userId, date, createdAt])
+}
+
+model JournalLine {
+  id        String       @id @default(cuid())
+  userId    String
+  entryId   String
+  accountId String
+  debit     Int          @default(0)
+  credit    Int          @default(0)
+  entry     JournalEntry @relation(fields: [userId, entryId], references: [userId, id], onDelete: Cascade)
+  account   Account      @relation(fields: [userId, accountId], references: [userId, id])
+
+  @@index([userId, accountId])
+}
+
+model AccountingSource {
+  userId      String
+  key         String
+  fingerprint String
+  entryId     String?
+
+  @@id([userId, key])
+}
+
+model ReceiptMatch {
+  id          String    @id
+  userId      String
+  date        DateTime  @db.Date
+  amount      Int
+  payer       String
+  invoiceIds  Json
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model RecurringInvoice {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  name      String
+  snapshot  Json
+  nextMonth String
+  issueDay  Int
+  dueDays   Int
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId, active, nextMonth])
+}
+
+model StatementFeed {
+  id        String          @id @default(cuid())
+  userId    String
+  name      String
+  kind      String
+  accountId String
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account   Account         @relation(fields: [userId, accountId], references: [userId, id])
+  rows      StatementRow[]
+  rules     StatementRule[]
+
+  @@unique([userId, id])
+  @@unique([userId, name])
+}
+
+model StatementRow {
+  id          String        @id @default(cuid())
+  userId      String
+  feedId      String
+  fingerprint String
+  date        DateTime      @db.Date
+  description String
+  amount      Int
+  reference   String?
+  status      String        @default("PENDING")
+  entryId     String?
+  decision    String?
+  fileName    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  feed        StatementFeed @relation(fields: [userId, feedId], references: [userId, id], onDelete: Cascade)
+
+  entry JournalEntry? @relation(fields: [userId, entryId], references: [userId, id], onDelete: Restrict)
+
+  @@unique([feedId, entryId])
+  @@unique([userId, feedId, fingerprint])
+  @@index([userId, feedId, status, date])
+}
+
+model StatementRule {
+  id               String        @id @default(cuid())
+  userId           String
+  feedId           String
+  descriptionKey   String
+  direction        String
+  counterAccountId String
+  automatic        Boolean       @default(false)
+  active           Boolean       @default(true)
+  updatedAt        DateTime      @updatedAt
+  feed             StatementFeed @relation(fields: [userId, feedId], references: [userId, id], onDelete: Cascade)
+  counterAccount   Account       @relation(fields: [userId, counterAccountId], references: [userId, id])
+
+  @@unique([userId, feedId, descriptionKey, direction])
+}
+
+model ClaimWorkspace {
+  ownerId String         @id
+  name    String
+  owner   User           @relation("ClaimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members ClaimMember[]
+  claims  ExpenseClaim[]
+}
+
+model ClaimMember {
+  id        String         @id @default(cuid())
+  ownerId   String
+  userId    String
+  role      String
+  active    Boolean        @default(true)
+  updatedAt DateTime       @updatedAt
+  workspace ClaimWorkspace @relation(fields: [ownerId], references: [ownerId], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([ownerId, userId])
+  @@index([userId, active])
+}
+
+model ExpenseClaim {
+  id             String         @id
+  ownerId        String
+  applicantId    String
+  title          String
+  merchant       String
+  date           DateTime       @db.Date
+  amount         Int
+  category       String
+  note           String
+  status         String         @default("DRAFT")
+  revision       Int            @default(0)
+  entryId        String?
+  paymentEntryId String?
+  paidDate       DateTime?      @db.Date
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  workspace      ClaimWorkspace @relation(fields: [ownerId], references: [ownerId], onDelete: Restrict)
+  applicant      User           @relation("ClaimApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  receipt        ClaimReceipt?
+  events         ClaimEvent[]
+
+  entry        JournalEntry? @relation("ClaimPosting", fields: [ownerId, entryId], references: [userId, id], onDelete: Restrict, map: "ExpenseClaim_entry_owner_fkey")
+  paymentEntry JournalEntry? @relation("ClaimPayment", fields: [ownerId, paymentEntryId], references: [userId, id], onDelete: Restrict, map: "ExpenseClaim_payment_owner_fkey")
+
+  @@index([ownerId, status, date])
+  @@index([applicantId, updatedAt])
+}
+
+model ClaimReceipt {
+  claimId  String       @id
+  filename String
+  mimeType String
+  data     Bytes
+  claim    ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+}
+
+model ClaimEvent {
+  id        String       @id @default(cuid())
+  claimId   String
+  actorId   String
+  action    String
+  comment   String
+  revision  Int
+  createdAt DateTime     @default(now())
+  claim     ExpenseClaim @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  actor     User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([claimId, createdAt])
+}
+
+model AppNotification {
+  id                  String    @id @default(cuid())
+  userId              String
+  eventKey            String
+  title               String
+  href                String
+  readAt              DateTime?
+  emailStatus         String    @default("DISABLED")
+  emailPayload        Json?
+  emailAttempts       Int       @default(0)
+  emailFirstAttemptAt DateTime?
+  emailLastAttemptAt  DateTime?
+  createdAt           DateTime  @default(now())
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt])
+  @@index([emailStatus, createdAt])
+}
+
+model NotificationPreference {
+  userId       String  @id
+  emailEnabled Boolean @default(false)
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

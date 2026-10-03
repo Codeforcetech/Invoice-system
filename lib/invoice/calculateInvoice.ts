@@ -16,7 +16,7 @@ export function calculateInvoice(input: CalculateInvoiceInput): CalculateInvoice
     input.items.reduce((sum, item) => {
       const autoAmount = item.quantity * item.unitPrice;
       const amount = item.amountManuallyEdited ? item.amount : autoAmount;
-      return sum + amount;
+      return sum + toYenInt(amount);
     }, 0),
   );
 

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getInvoice, type InvoiceWithItems } from "@/actions/invoice-actions";
 import { listMailTemplates } from "@/actions/mail-template-actions";
 import { InvoiceDetail } from "@/app/(app)/invoices/_components/invoice-detail";
@@ -10,6 +11,7 @@ export default async function InvoiceDetailPage(props: { params: Promise<{ invoi
     listMailTemplates(),
   ]);
 
+  if(invoice.mergedIntoId) redirect(`/invoices/${invoice.mergedIntoId}/edit`);
   const mailTemplates = mailRows.map((t) => ({
     id: t.id,
     name: t.name,

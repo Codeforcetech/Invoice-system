@@ -1,400 +1,590 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { Resolver } from "react-hook-form";
-import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Controller,
+  useFieldArray,
+  useForm,
+  useWatch,
+  type Resolver,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { MailTemplate } from "@prisma/client";
-
 import type { CompanyForInvoiceForm } from "@/actions/company-actions";
-import { invoiceUpsertSchema, type InvoiceUpsertInput } from "@/lib/validators/invoice";
+import {
+  invoiceUpsertSchema,
+  type InvoiceUpsertInput,
+} from "@/lib/validators/invoice";
 import { calculateInvoice } from "@/lib/invoice/calculateInvoice";
-import { createInvoice, updateInvoice, saveInvoiceAutosave } from "@/actions/invoice-actions";
+import {
+  createInvoice,
+  updateInvoice,
+  saveInvoiceAutosave,
+} from "@/actions/invoice-actions";
 import { INVOICE_NUMBER_CONFLICT_MESSAGE } from "@/lib/invoice/invoice-messages";
-import { ItemTemplateSelector, type ItemTemplateOption } from "@/components/invoices/item-template-selector";
-import { AutosaveStatus, type AutosaveUiState } from "@/components/invoices/autosave-status";
+import {
+  ItemTemplateSelector,
+  type ItemTemplateOption,
+} from "@/components/invoices/item-template-selector";
+import {
+  AutosaveStatus,
+  type AutosaveUiState,
+} from "@/components/invoices/autosave-status";
 import { InvoicePreviewModal } from "@/components/invoices/invoice-preview-modal";
+import { InvoiceLivePreview } from "@/components/invoices/invoice-live-preview";
 import { SendInvoiceMailModal } from "@/components/invoices/send-invoice-mail-modal";
+import type {
+  InvoiceDocument,
+  InvoicePrintSettings,
+} from "./invoice-print-view";
 
+const inputClass =
+  "mt-1.5 block min-w-0 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 disabled:bg-slate-50";
+const buttonClass =
+  "inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryClass = buttonClass
+  .replace("border-slate-200 bg-white", "border-sky-600 bg-sky-600")
+  .replace("text-slate-700", "text-white")
+  .replace("hover:bg-slate-50", "hover:bg-sky-700");
 const LAST_UNIT_PRICE_KEY = "invoice_last_unit_price_v1";
-
-function yen(n: number) {
-  return new Intl.NumberFormat("ja-JP").format(n);
+const yen = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
+const finite = (n: unknown) => (Number.isFinite(Number(n)) ? Number(n) : 0);
+const emptyItem = (price = 0) => ({
+  productName: "",
+  unit: "",
+  quantity: 1,
+  unitPrice: price,
+  amount: price,
+  amountManuallyEdited: false,
+  note: "",
+});
+function dateValue(value: Date | string | undefined) {
+  const d = new Date(value ?? "");
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-function toYenInt(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.floor(value);
-}
-
-function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function addDaysToDate(d: Date, days: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-
-function dateInputValue(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function friendlySaveError(e: unknown): string {
-  if (e instanceof Error) {
-    if (e.message === INVOICE_NUMBER_CONFLICT_MESSAGE) return e.message;
-    if (
-      e.message.includes("PrismaClient") ||
-      e.message.includes("Invalid `") ||
-      e.message.includes("Unique constraint")
-    ) {
-      return "保存に失敗しました。ページを再読み込みしてから再度お試しください。";
-    }
+function saveError(e: unknown) {
+  if (e instanceof Error && e.message === INVOICE_NUMBER_CONFLICT_MESSAGE)
     return e.message;
-  }
-  return "保存に失敗しました";
+  return "保存できませんでした。入力内容は残っています。通信状況を確認して、もう一度保存してください。";
+}
+function Field(props: {
+  label: string;
+  id: string;
+  required?: boolean;
+  error?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={props.className}>
+      <label
+        htmlFor={props.id}
+        className="text-xs font-semibold text-slate-600"
+      >
+        {props.label}
+        {props.required && (
+          <span className="ml-2 text-[10px] font-medium text-sky-700">
+            必須
+          </span>
+        )}
+      </label>
+      {props.children}
+      {props.error && (
+        <p
+          id={`${props.id}-error`}
+          className="mt-1 text-xs text-red-600"
+          role="alert"
+        >
+          {props.error}
+        </p>
+      )}
+    </div>
+  );
+}
+function Section(props: {
+  number: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-xs font-bold text-sky-700">
+          {props.number}
+        </span>
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">{props.title}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            {props.description}
+          </p>
+        </div>
+      </div>
+      {props.children}
+    </section>
+  );
 }
 
 export function InvoiceForm(props: {
   companies: CompanyForInvoiceForm[];
   itemTemplates: ItemTemplateOption[];
-  mailTemplates: Pick<MailTemplate, "id" | "name" | "subjectTemplate" | "bodyTemplate">[];
+  mailTemplates: Pick<
+    MailTemplate,
+    "id" | "name" | "subjectTemplate" | "bodyTemplate"
+  >[];
   defaultTaxRateBps: number;
+  settings: InvoicePrintSettings;
+  invoiceNumber?: string;
   mode?: "create" | "edit";
   invoiceId?: string;
   initialValues?: Partial<InvoiceUpsertInput>;
 }) {
   const router = useRouter();
-  const mode = props.mode ?? "create";
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [draftInvoiceId, setDraftInvoiceId] = useState<string | null>(
-    mode === "edit" && props.invoiceId ? props.invoiceId : null,
-  );
+  const [invoiceNumber, setInvoiceNumber] = useState(props.invoiceNumber);
+  const [invoiceId, setInvoiceId] = useState(props.invoiceId ?? null);
+  const idRef = useRef(props.invoiceId ?? null);
+  const manualSaving = useRef(false);
+  const autoInFlight = useRef<Promise<void> | null>(null);
+  const savedSnapshot = useRef("");
+  const attemptedSnapshot = useRef("");
   const [autosaveState, setAutosaveState] = useState<AutosaveUiState>("idle");
-  const [autosaveErrorDetail, setAutosaveErrorDetail] = useState<string | null>(null);
-  const [lastAutosaveAt, setLastAutosaveAt] = useState<Date | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewZoomed, setPreviewZoomed] = useState(false);
   const [mailOpen, setMailOpen] = useState(false);
-  const prevCompanyIdRef = useRef<string>("");
-
+  const [mobileTab, setMobileTab] = useState<"input" | "preview">("input");
+  const [lastUnitPrice, setLastUnitPrice] = useState(0);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const form = useForm<InvoiceUpsertInput>({
     resolver: zodResolver(invoiceUpsertSchema) as Resolver<InvoiceUpsertInput>,
     defaultValues: {
-      companyId: props.companies[0]?.id ?? "",
+      companyId: "",
       subject: "",
-      issueDate: new Date(todayISO()),
-      dueDate: new Date(todayISO()),
+      issueDate: new Date(),
+      dueDate: new Date(),
       withholdingEnabled: false,
       status: "DRAFT",
-      items: [
-        {
-          productName: "",
-          unit: "",
-          quantity: 1,
-          unitPrice: 0,
-          amount: 0,
-          amountManuallyEdited: false,
-          note: "",
-        },
-      ],
+      items: [emptyItem()],
       ...props.initialValues,
     },
     mode: "onChange",
   });
-
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "items",
   });
-
-  const watchItems = form.watch("items");
-  const withholdingEnabled = form.watch("withholdingEnabled");
-  const statusWatch = form.watch("status");
-  const companyIdWatch = useWatch({ control: form.control, name: "companyId" });
-  const issueDateWatch = useWatch({ control: form.control, name: "issueDate" });
-  const dueDateWatch = useWatch({ control: form.control, name: "dueDate" });
-  const dueDateInitSkippedRef = useRef(false);
-
   const snapshot = useWatch({ control: form.control });
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const values = form.getValues();
+  const company = props.companies.find((c) => c.id === snapshot.companyId);
+  const previousCompany = useRef<string | undefined>(undefined);
+  const previousDates = useRef<string | null>(null);
+  const errors = form.formState.errors;
 
-  /** 手修正行以外は 金額 = 数量 × 単価。setValue のみ使い行の再マウントを避ける */
-  const recalcLineAmount = useCallback(
-    (idx: number) => {
-      const row = form.getValues(`items.${idx}`);
-      if (!row || row.amountManuallyEdited) return;
-      const q = Number(row.quantity);
-      const p = Number(row.unitPrice);
-      const quantity = Number.isFinite(q) ? q : 0;
-      const unitPrice = Number.isFinite(p) ? p : 0;
-      const autoAmount = toYenInt(quantity * unitPrice);
-      if ((row.amount ?? 0) !== autoAmount) {
-        form.setValue(`items.${idx}.amount`, autoAmount, { shouldDirty: true, shouldValidate: true });
-      }
-    },
-    [form],
-  );
-
-  const normalizeQuantityOnBlur = useCallback(
-    (idx: number) => {
-      const q = form.getValues(`items.${idx}.quantity`);
-      if (q === undefined || q === null || (typeof q === "number" && Number.isNaN(q))) {
-        form.setValue(`items.${idx}.quantity`, 0, { shouldDirty: true, shouldValidate: true });
-      }
-      recalcLineAmount(idx);
-    },
-    [form, recalcLineAmount],
-  );
-
-  /** Enter: 送信せず確定 → 品目 → 数量 → 単価 → 備考 → 次行 */
-  const ITEM_ENTER_FLOW = ["productName", "quantity", "unitPrice", "note"] as const;
-  type ItemEnterField = (typeof ITEM_ENTER_FLOW)[number] | "unit" | "amount";
-
-  const focusNextItemField = useCallback(
-    (idx: number, current: ItemEnterField) => {
-      // Enter 移動順上の「現在位置」（単位→数量へ、金額→備考へ）
-      const pos =
-        current === "productName" || current === "unit"
-          ? 0
-          : current === "quantity"
-            ? 1
-            : current === "unitPrice" || current === "amount"
-              ? 2
-              : 3;
-
-      let nextIdx = idx;
-      let nextPos = pos + 1;
-      if (nextPos >= ITEM_ENTER_FLOW.length) {
-        nextIdx = idx + 1;
-        nextPos = 0;
-      }
-      if (nextIdx >= fields.length) return;
-
-      const nextName = `items.${nextIdx}.${ITEM_ENTER_FLOW[nextPos]}`;
-      const el = document.querySelector<HTMLInputElement>(`input[name="${nextName}"]`);
-      el?.focus();
-      el?.select();
-    },
-    [fields.length],
-  );
-
-  const onItemFieldKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>, idx: number, field: ItemEnterField) => {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      if (field === "quantity") normalizeQuantityOnBlur(idx);
-      else if (field === "unitPrice") recalcLineAmount(idx);
-      focusNextItemField(idx, field);
-    },
-    [focusNextItemField, normalizeQuantityOnBlur, recalcLineAmount],
-  );
-
-  const summary = useMemo(() => {
-    return calculateInvoice({
-      items: (watchItems ?? []).map((it) => ({
-        quantity: Number(it.quantity ?? 0),
-        unitPrice: Number(it.unitPrice ?? 0),
-        amount: Number(it.amount ?? 0),
-        amountManuallyEdited: Boolean(it.amountManuallyEdited),
-      })),
-      taxRateBps: props.defaultTaxRateBps,
-      withholdingEnabled: Boolean(withholdingEnabled),
-    });
-  }, [watchItems, props.defaultTaxRateBps, withholdingEnabled]);
-
-  // 会社変更時：件名候補（空のときのみ）
   useEffect(() => {
-    if (!companyIdWatch) return;
-    if (prevCompanyIdRef.current === companyIdWatch) return;
-    prevCompanyIdRef.current = companyIdWatch;
-    const c = props.companies.find((x) => x.id === companyIdWatch);
-    if (!c) return;
-    const sub = form.getValues("subject");
-    if (!sub?.trim() && c.commonSubject) {
-      form.setValue("subject", c.commonSubject, { shouldValidate: true });
-    }
-  }, [companyIdWatch, props.companies, form]);
-
-  // 請求日 + 会社の defaultDueDays で支払期限を同期（新規は初回も反映／編集は初回マウントでは上書きしない）
-  useEffect(() => {
-    const c = props.companies.find((x) => x.id === companyIdWatch);
-    if (!c) return;
-    const issue =
-      issueDateWatch instanceof Date ? issueDateWatch : new Date(issueDateWatch as unknown as string);
-    if (Number.isNaN(issue.getTime())) return;
-    if (mode === "edit" && !dueDateInitSkippedRef.current) {
-      dueDateInitSkippedRef.current = true;
-      return;
-    }
-    const days = c.defaultDueDays ?? 30;
-    const due = addDaysToDate(issue, days);
-    form.setValue("dueDate", due, { shouldValidate: true });
-  }, [companyIdWatch, issueDateWatch, mode, props.companies, form]);
-
-  const runAutosave = useCallback(async () => {
-    const values = form.getValues();
-    if (values.status !== "DRAFT") {
-      setAutosaveState("idle");
-      return;
-    }
-    setAutosaveState("saving");
-    setAutosaveErrorDetail(null);
     try {
-      const r = await saveInvoiceAutosave({ invoiceId: draftInvoiceId, data: values });
-      if (r.ok && "skipped" in r && r.skipped) {
-        setAutosaveState("idle");
-        return;
-      }
-      if (!r.ok && r.reason === "invalid") {
-        setAutosaveState("waiting");
-        return;
-      }
-      if (!r.ok && r.reason === "number_conflict") {
-        setAutosaveState("error");
-        setAutosaveErrorDetail(INVOICE_NUMBER_CONFLICT_MESSAGE);
-        return;
-      }
-      if (r.ok && "invoiceId" in r && r.invoiceId) {
-        setDraftInvoiceId(r.invoiceId);
-        setLastAutosaveAt(new Date());
-        setAutosaveState("saved");
-        router.refresh();
-      }
+      setLastUnitPrice(finite(localStorage.getItem(LAST_UNIT_PRICE_KEY)));
     } catch {
-      setAutosaveState("error");
-    }
-  }, [draftInvoiceId, form, router]);
-
-  // 自動保存（入力停止後 2.5 秒）
-  useEffect(() => {
-    if (!snapshot) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      void runAutosave();
-    }, 2500);
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(snapshot), runAutosave]);
-
-  const effectiveInvoiceId = draftInvoiceId ?? props.invoiceId ?? null;
-  const lastUnitHint = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const v = localStorage.getItem(LAST_UNIT_PRICE_KEY);
-      return v ? Number(v) : null;
-    } catch {
-      return null;
+      /* optional hint */
     }
   }, []);
+  useEffect(() => {
+    if (!company || previousCompany.current === company.id) return;
+    previousCompany.current = company.id;
+    if (!form.getValues("subject").trim() && company.commonSubject)
+      form.setValue("subject", company.commonSubject, { shouldValidate: true });
+  }, [company, form]);
+  const issueDateKey = dateValue(snapshot.issueDate);
+  useEffect(() => {
+    if (!company || !issueDateKey) return;
+    const key = `${company.id}:${issueDateKey}`;
+    if (previousDates.current === key) return;
+    const first = previousDates.current === null;
+    previousDates.current = key;
+    if (first && props.mode === "edit") return;
+    const d = new Date(`${issueDateKey}T00:00:00`);
+    d.setDate(d.getDate() + (company.defaultDueDays ?? 30));
+    form.setValue("dueDate", d, { shouldValidate: true });
+  }, [company, issueDateKey, form, props.mode]);
 
-  async function onSubmit(values: InvoiceUpsertInput) {
+  // A manual save waits for an ongoing autosave, so a new draft is never created twice.
+  const runAutosave = useCallback(async () => {
+    if (manualSaving.current || autoInFlight.current) return;
+    const data = form.getValues();
+    const fingerprint = JSON.stringify(data);
+    if (
+      data.status !== "DRAFT" ||
+      fingerprint === savedSnapshot.current ||
+      fingerprint === attemptedSnapshot.current
+    )
+      return;
+    attemptedSnapshot.current = fingerprint;
+    if (!invoiceUpsertSchema.safeParse(data).success) {
+      setAutosaveState("waiting");
+      return;
+    }
+    const task = async () => {
+      setAutosaveState("saving");
+      try {
+        const result = await saveInvoiceAutosave({
+          invoiceId: idRef.current,
+          data,
+        });
+        if (!result.ok) {
+          setAutosaveState(result.reason === "invalid" ? "waiting" : "error");
+          return;
+        }
+        if ("invoiceId" in result && result.invoiceId) {
+          idRef.current = result.invoiceId;
+          setInvoiceId(result.invoiceId);
+          setInvoiceNumber(result.invoiceNumber);
+          savedSnapshot.current = fingerprint;
+          setLastSavedAt(new Date());
+          setAutosaveState(
+            JSON.stringify(form.getValues()) === fingerprint
+              ? "saved"
+              : "waiting",
+          );
+        }
+      } catch {
+        setAutosaveState("error");
+      }
+    };
+    autoInFlight.current = task();
+    try {
+      await autoInFlight.current;
+    } finally {
+      autoInFlight.current = null;
+    }
+  }, [form]);
+  const snapshotKey = JSON.stringify(snapshot);
+  useEffect(() => {
+    const timer = setTimeout(() => void runAutosave(), 2500);
+    return () => clearTimeout(timer);
+  }, [snapshotKey, runAutosave, autosaveState]);
+
+  const normalizedItems = (values.items ?? []).map((item, idx) => ({
+    ...item,
+    id: fields[idx]?.id ?? String(idx),
+    productName: item.productName || "品目名を入力",
+    unit: item.unit ?? null,
+    note: item.note ?? null,
+    quantity: finite(item.quantity),
+    unitPrice: finite(item.unitPrice),
+    amount: item.amountManuallyEdited
+      ? finite(item.amount)
+      : Math.floor(finite(item.quantity) * finite(item.unitPrice)),
+  }));
+  const summary = calculateInvoice({
+    items: normalizedItems,
+    taxRateBps: props.defaultTaxRateBps,
+    withholdingEnabled: Boolean(values.withholdingEnabled),
+  });
+  const document: InvoiceDocument = {
+    id: invoiceId ?? "preview",
+    invoiceNumber: invoiceNumber ?? "保存時に自動採番",
+    subject: values.subject || "件名を入力",
+    company: {
+      name: company?.name ?? "取引先を選択",
+      paymentTerms: company?.paymentTerms ?? null,
+    },
+    issueDate: values.issueDate,
+    dueDate: values.dueDate,
+    taxRate: props.defaultTaxRateBps,
+    withholdingEnabled: Boolean(values.withholdingEnabled),
+    items: normalizedItems,
+    ...summary,
+  };
+  const checks = [
+    { label: "取引先", done: Boolean(company) },
+    { label: "件名", done: Boolean(values.subject?.trim()) },
+    {
+      label: "明細",
+      done:
+        (values.items?.length ?? 0) > 0 &&
+        values.items.every(
+          (item) =>
+            Boolean(item.productName.trim()) &&
+            finite(item.quantity) >= 0 &&
+            !Number.isNaN(item.quantity),
+        ),
+    },
+  ];
+  const complete = checks.filter((c) => c.done).length;
+  const dirty = JSON.stringify(values) !== savedSnapshot.current;
+  const dueBeforeIssue =
+    dateValue(values.dueDate) < dateValue(values.issueDate);
+  const validationProblems = useMemo(() => {
+    const result = invoiceUpsertSchema.safeParse(snapshot);
+    return result.success
+      ? []
+      : [...new Set(result.error.issues.map((issue) => issue.message))];
+  }, [snapshot]);
+
+  async function persist(data: InvoiceUpsertInput): Promise<string | null> {
+    if (manualSaving.current) return null;
+    manualSaving.current = true;
+    setSaving(true);
     setServerError(null);
     setSuccessMessage(null);
-    setSaving(true);
     try {
-      if (mode === "create") {
-        if (draftInvoiceId) {
-          await updateInvoice({ invoiceId: draftInvoiceId, data: values });
-          setSuccessMessage("保存しました。");
-        } else {
-          const created = await createInvoice(values);
-          setDraftInvoiceId(created.id);
-          setSuccessMessage("保存しました。");
-        }
-        router.refresh();
-      } else {
-        if (!props.invoiceId) throw new Error("invoiceId is required");
-        await updateInvoice({ invoiceId: props.invoiceId, data: values });
-        setSuccessMessage("更新しました。");
-        router.refresh();
-      }
+      await autoInFlight.current;
+      const result = idRef.current
+        ? await updateInvoice({ invoiceId: idRef.current, data })
+        : await createInvoice(data);
+      idRef.current = result.id;
+      setInvoiceId(result.id);
+      setInvoiceNumber(result.invoiceNumber);
+      form.setValue("status", data.status);
+      savedSnapshot.current = JSON.stringify(data);
+      setLastSavedAt(new Date());
+      setAutosaveState("saved");
+      setSuccessMessage(
+        data.status === "ISSUED"
+          ? "発行済みとして保存しました。PDF・印刷やGmailの下書き作成に進めます。"
+          : "保存しました。入力内容は保存済みです。",
+      );
+      router.refresh();
+      return result.id;
     } catch (e) {
-      setServerError(friendlySaveError(e));
+      setServerError(saveError(e));
+      return null;
     } finally {
+      manualSaving.current = false;
       setSaving(false);
     }
   }
-
-  async function onIssue() {
-    form.setValue("status", "ISSUED");
-    const ok = await form.trigger();
-    if (!ok) return;
-    await onSubmit(form.getValues());
+  async function saveAndContinue(next?: "print" | "mail" | "issue") {
+    if (manualSaving.current) return;
+    setValidationAttempted(true);
+    if (!(await form.trigger(undefined, { shouldFocus: true }))) {
+      setMobileTab("input");
+      return;
+    }
+    const data = form.getValues();
+    const id = await persist(
+      next === "issue" ? { ...data, status: "ISSUED" } : data,
+    );
+    if (!id) return;
+    if (next === "print") setPreviewOpen(true);
+    if (next === "mail") setMailOpen(true);
+  }
+  function addItem() {
+    append(emptyItem(lastUnitPrice), {
+      focusName: `items.${fields.length}.productName`,
+    });
+  }
+  function deadline(months: number) {
+    const d = new Date(values.issueDate);
+    if (Number.isNaN(d.getTime())) return;
+    form.setValue(
+      "dueDate",
+      new Date(d.getFullYear(), d.getMonth() + months + 1, 0),
+      { shouldDirty: true, shouldValidate: true },
+    );
+  }
+  function moneyInput(idx: number, key: "unitPrice" | "amount") {
+    return (
+      <Controller
+        control={form.control}
+        name={`items.${idx}.${key}`}
+        render={({ field }) => (
+          <input
+            {...field}
+            id={`item-${idx}-${key}`}
+            aria-label={`${idx + 1}行目の${key === "unitPrice" ? "単価" : "金額"}`}
+            inputMode="numeric"
+            className={`${inputClass} text-right tabular-nums`}
+            value={
+              key === "amount" && !values.items[idx].amountManuallyEdited
+                ? yen(normalizedItems[idx].amount)
+                : field.value
+                  ? yen(field.value)
+                  : ""
+            }
+            placeholder="0"
+            onChange={(e) => {
+              const raw = e.target.value.replace(/[,，]/g, "");
+              if (!/^\d*$/.test(raw)) return;
+              field.onChange(raw ? Number(raw) : 0);
+              if (key === "amount")
+                form.setValue(`items.${idx}.amountManuallyEdited`, true, {
+                  shouldDirty: true,
+                });
+            }}
+            onBlur={() => {
+              field.onBlur();
+              if (key === "unitPrice" && field.value > 0) {
+                setLastUnitPrice(field.value);
+                try {
+                  localStorage.setItem(
+                    LAST_UNIT_PRICE_KEY,
+                    String(field.value),
+                  );
+                } catch {
+                  /* optional hint */
+                }
+              }
+            }}
+          />
+        )}
+      />
+    );
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="w-full min-w-0 max-w-full space-y-6">
-      {/* 上部ツールバー */}
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="text-lg font-semibold text-slate-900">
-            {mode === "create" ? "請求書の作成" : "請求書の編集"}
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            左で入力・右で金額確認。下書きは自動保存されます（必須項目が揃った時点から）。
-          </div>
-        </div>
-        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
-            onClick={() => setPreviewOpen(true)}
-            disabled={!effectiveInvoiceId}
-            title={effectiveInvoiceId ? "帳票のプレビュー・印刷" : "保存後に利用できます"}
-          >
-            プレビュー/印刷
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            onClick={() => setMailOpen(true)}
-          >
-            メール送信
-          </button>
-        </div>
+    <form
+      noValidate
+      onKeyDown={(e) => {
+        if (
+          e.key !== "Enter" ||
+          e.nativeEvent.isComposing ||
+          e.keyCode === 229 ||
+          !(e.target instanceof HTMLInputElement)
+        )
+          return;
+        e.preventDefault();
+        const controls = Array.from(
+          e.currentTarget.querySelectorAll<
+            HTMLInputElement | HTMLSelectElement
+          >("fieldset input, fieldset select"),
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+        const next = controls[controls.indexOf(e.target) + 1];
+        next?.focus();
+      }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void saveAndContinue();
+      }}
+      className="invoice-editor min-w-0 space-y-5 text-slate-900"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/invoices"
+          className="text-xs font-medium text-slate-500 hover:text-sky-700"
+        >
+          ← 請求書一覧
+        </Link>
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+          {values.status === "ISSUED"
+            ? "発行済み"
+            : values.status === "CONFIRMED"
+              ? "確定"
+              : "下書き"}
+        </span>
       </div>
-
-      <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
-        {/* 左カラム（min-w-0 でテーブル横スクロールが列内に閉じる） */}
-        <div className="min-w-0 space-y-6">
-          <section className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6">
-            <h2 className="text-sm font-semibold text-slate-900">基本情報</h2>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="text-xs font-medium text-slate-600">発行先会社</label>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-sky-50/60 px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">
+            {complete === 3 && validationProblems.length === 0
+              ? "入力が揃いました。仕上がりを確認しましょう。"
+              : "まずは取引先と請求内容を入力しましょう。"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            入力内容はプレビューにすぐ反映されます。
+          </p>
+        </div>
+        <ol aria-label="入力の進捗" className="flex gap-3 text-xs">
+          {checks.map((c, idx) => (
+            <li
+              key={c.label}
+              className={`flex items-center gap-1.5 ${c.done ? "text-sky-700" : "text-slate-500"}`}
+            >
+              <span
+                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${c.done ? "bg-sky-600 text-white" : "border border-slate-300 bg-white"}`}
+              >
+                {c.done ? "✓" : idx + 1}
+              </span>
+              {c.label}
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div
+        className="sticky top-0 z-20 grid grid-cols-2 rounded-xl bg-slate-200 p-1 lg:hidden"
+        aria-label="表示の切り替え"
+      >
+        {(["input", "preview"] as const).map((tab) => (
+          <button
+            type="button"
+            key={tab}
+            aria-pressed={mobileTab === tab}
+            onClick={() => setMobileTab(tab)}
+            className={`rounded-lg py-2.5 text-sm font-semibold ${mobileTab === tab ? "bg-white text-sky-700 shadow-sm" : "text-slate-600"}`}
+          >
+            {tab === "input" ? "データ入力" : "完成プレビュー"}
+          </button>
+        ))}
+      </div>
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <fieldset
+          disabled={saving}
+          className={`min-w-0 space-y-5 ${mobileTab === "preview" ? "hidden lg:block" : ""}`}
+        >
+          <legend className="sr-only">請求書の入力</legend>
+          <Section
+            number="01"
+            title="取引先と請求内容"
+            description="誰に、何の請求書を送るかを設定します。"
+          >
+            <div className="space-y-4">
+              <Field
+                label="取引先"
+                id="companyId"
+                required
+                error={errors.companyId?.message}
+              >
                 <select
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
+                  id="companyId"
+                  aria-invalid={Boolean(errors.companyId)}
+                  className={inputClass}
                   {...form.register("companyId")}
                 >
+                  <option value="">取引先を選択してください</option>
                   {props.companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
                 </select>
-                {form.formState.errors.companyId && (
-                  <p className="mt-1 text-sm text-red-600">{form.formState.errors.companyId.message}</p>
+                {props.companies.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    取引先が未登録です。
+                    <a
+                      href="/companies"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      会社一覧で登録 ↗
+                    </a>
+                    してから再読み込みしてください。
+                  </p>
                 )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-xs font-medium text-slate-600">件名</label>
+              </Field>
+              <Field
+                label="件名"
+                id="subject"
+                required
+                error={errors.subject?.message}
+              >
                 <input
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                  placeholder="例）2026年4月分 業務委託費"
+                  id="subject"
+                  aria-invalid={Boolean(errors.subject)}
+                  className={inputClass}
+                  placeholder="例）2026年9月分 Webサイト制作費"
                   list="invoice-subject-suggestions"
                   {...form.register("subject")}
                 />
@@ -405,384 +595,447 @@ export function InvoiceForm(props: {
                       <option key={c.id} value={c.commonSubject ?? ""} />
                     ))}
                 </datalist>
-                {form.formState.errors.subject && (
-                  <p className="mt-1 text-sm text-red-600">{form.formState.errors.subject.message}</p>
-                )}
+              </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(["issueDate", "dueDate"] as const).map((key) => (
+                  <Field
+                    key={key}
+                    label={key === "issueDate" ? "請求日" : "支払期限"}
+                    id={key}
+                    required
+                    error={errors[key]?.message}
+                  >
+                    <Controller
+                      control={form.control}
+                      name={key}
+                      render={({ field }) => (
+                        <input
+                          id={key}
+                          name={field.name}
+                          ref={field.ref}
+                          type="date"
+                          className={inputClass}
+                          value={dateValue(field.value)}
+                          onBlur={field.onBlur}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value
+                                ? new Date(`${e.target.value}T00:00:00`)
+                                : new Date(NaN),
+                            )
+                          }
+                        />
+                      )}
+                    />
+                  </Field>
+                ))}
               </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-600">請求日</label>
-                <input
-                  type="date"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                  value={dateInputValue(
-                    issueDateWatch instanceof Date
-                      ? issueDateWatch
-                      : new Date(issueDateWatch as unknown as string),
-                  )}
-                  onChange={(e) => {
-                    const [y, m, d] = e.target.value.split("-").map(Number);
-                    if (!y || !m || !d) return;
-                    form.setValue("issueDate", new Date(y, m - 1, d), { shouldValidate: true });
+              <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                <span className="text-slate-500">支払期限を設定</span>
+                <button
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 hover:bg-slate-50"
+                  type="button"
+                  onClick={() => deadline(0)}
+                >
+                  請求月末
+                </button>
+                <button
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 hover:bg-slate-50"
+                  type="button"
+                  onClick={() => deadline(1)}
+                >
+                  翌月末
+                </button>
+              </div>
+              {dueBeforeIssue && (
+                <p className="text-xs text-amber-700" role="status">
+                  支払期限が請求日より前になっています。日付をご確認ください。
+                </p>
+              )}
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                取引先・請求日を変更すると、支払期限に取引先の設定日数を反映します。
+              </p>
+            </div>
+          </Section>
+          <Section
+            number="02"
+            title="請求明細"
+            description="品目・数量・単価を入力すると、金額と税額を自動計算します。"
+          >
+            {props.itemTemplates.length > 0 && (
+              <div className="mb-4">
+                <ItemTemplateSelector
+                  templates={props.itemTemplates}
+                  disabled={saving}
+                  onApply={(row) => {
+                    if (
+                      fields.length === 1 &&
+                      !values.items[0].productName &&
+                      !values.items[0].unitPrice &&
+                      !values.items[0].note &&
+                      !values.items[0].amountManuallyEdited
+                    )
+                      update(0, row);
+                    else append(row);
                   }}
                 />
               </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-600">支払期限</label>
-                <input
-                  type="date"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                  value={dateInputValue(
-                    dueDateWatch instanceof Date ? dueDateWatch : new Date(dueDateWatch as unknown as string),
-                  )}
-                  onChange={(e) => {
-                    const [y, m, d] = e.target.value.split("-").map(Number);
-                    if (!y || !m || !d) return;
-                    form.setValue("dueDate", new Date(y, m - 1, d), { shouldValidate: true });
-                  }}
-                />
-              </div>
-
-              <div className="md:col-span-2 rounded-lg border border-slate-100 bg-slate-50/80 px-4 py-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">源泉所得税</div>
-                    <div className="text-xs text-slate-500">請求書単位で選択（どちらか一方）</div>
+            )}
+            <div className="space-y-4">
+              {fields.map((field, idx) => (
+                <div
+                  key={field.id}
+                  className={`rounded-xl border p-4 ${values.items[idx]?.amountManuallyEdited ? "border-amber-200 bg-amber-50/30" : "border-slate-200 bg-slate-50/50"}`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500">
+                      明細 {String(idx + 1).padStart(2, "0")}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`明細${idx + 1}を削除`}
+                      className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                      disabled={fields.length <= 1}
+                      onClick={() => remove(idx)}
+                    >
+                      削除
+                    </button>
                   </div>
-                  <div className="flex items-center gap-5 text-sm">
-                    <label className="flex items-center gap-2">
+                  <Field
+                    id={`item-${idx}-productName`}
+                    label="品目"
+                    required
+                    error={errors.items?.[idx]?.productName?.message}
+                  >
+                    <input
+                      id={`item-${idx}-productName`}
+                      className={inputClass}
+                      placeholder="例）Webサイト制作"
+                      {...form.register(`items.${idx}.productName`)}
+                    />
+                  </Field>
+                  <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.5fr)] gap-3">
+                    <Field
+                      id={`item-${idx}-quantity`}
+                      label="数量"
+                      error={errors.items?.[idx]?.quantity?.message}
+                    >
                       <input
-                        type="radio"
-                        name="withholdingEnabledRadio"
-                        className="h-4 w-4"
-                        checked={Boolean(withholdingEnabled) === true}
-                        onChange={() => form.setValue("withholdingEnabled", true, { shouldValidate: true })}
+                        id={`item-${idx}-quantity`}
+                        className={`${inputClass} text-right tabular-nums`}
+                        inputMode="decimal"
+                        {...form.register(`items.${idx}.quantity`, {
+                          valueAsNumber: true,
+                        })}
                       />
-                      あり
-                    </label>
-                    <label className="flex items-center gap-2">
+                    </Field>
+                    <Field id={`item-${idx}-unit`} label="単位">
                       <input
-                        type="radio"
-                        name="withholdingEnabledRadio"
-                        className="h-4 w-4"
-                        checked={Boolean(withholdingEnabled) === false}
-                        onChange={() => form.setValue("withholdingEnabled", false, { shouldValidate: true })}
+                        id={`item-${idx}-unit`}
+                        className={inputClass}
+                        placeholder="式"
+                        {...form.register(`items.${idx}.unit`)}
                       />
-                      なし
-                    </label>
-                    <input type="hidden" {...form.register("withholdingEnabled")} />
+                    </Field>
+                    <Field
+                      id={`item-${idx}-unitPrice`}
+                      label="単価（円・税抜）"
+                      error={errors.items?.[idx]?.unitPrice?.message}
+                    >
+                      {moneyInput(idx, "unitPrice")}
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field id={`item-${idx}-note`} label="明細の備考">
+                      <input
+                        id={`item-${idx}-note`}
+                        className={inputClass}
+                        placeholder="任意"
+                        {...form.register(`items.${idx}.note`)}
+                      />
+                    </Field>
+                    <Field
+                      id={`item-${idx}-amount`}
+                      label="金額（円・税抜）"
+                      error={errors.items?.[idx]?.amount?.message}
+                    >
+                      {moneyInput(idx, "amount")}
+                    </Field>
+                  </div>
+                  <div className="mt-2 text-right text-[11px]">
+                    {values.items[idx]?.amountManuallyEdited ? (
+                      <button
+                        type="button"
+                        className="text-amber-700 underline"
+                        onClick={() =>
+                          form.setValue(
+                            `items.${idx}.amountManuallyEdited`,
+                            false,
+                            { shouldDirty: true, shouldValidate: true },
+                          )
+                        }
+                      >
+                        手入力中 · 自動計算に戻す
+                      </button>
+                    ) : (
+                      <span className="text-slate-400">
+                        数量 × 単価で自動計算 · 金額は直接調整できます
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-600">ステータス</label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                  {...form.register("status")}
-                >
-                  <option value="DRAFT">下書き</option>
-                  <option value="CONFIRMED">確定</option>
-                  <option value="ISSUED">発行済み</option>
-                </select>
-              </div>
+              ))}
             </div>
-          </section>
-
-          <section className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:p-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-slate-900">明細</h2>
-                <p className="mt-1 text-xs text-slate-500">Tab / Enter で入力しやすいよう、右寄せで金額系を揃えています。</p>
-              </div>
-              <button
-                type="button"
-                className="inline-flex flex-shrink-0 items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
-                onClick={() => {
-                  const unitPrice = lastUnitHint && lastUnitHint > 0 ? lastUnitHint : 0;
-                  append({
-                    productName: "",
-                    unit: "",
-                    quantity: 1,
-                    unitPrice,
-                    amount: toYenInt(1 * unitPrice),
-                    amountManuallyEdited: false,
-                    note: "",
-                  });
-                }}
-              >
-                ＋ 明細を追加
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <ItemTemplateSelector
-                templates={props.itemTemplates}
-                onApply={(row) => append(row)}
-                disabled={saving}
-              />
-            </div>
-
-            {lastUnitHint && lastUnitHint > 0 ? (
-              <p className="mt-3 text-xs text-slate-500">
-                前回の単価の目安: <span className="font-mono tabular-nums">{yen(lastUnitHint)}</span> 円（新規行に自動反映）
+            <button
+              type="button"
+              className="mt-4 w-full rounded-lg border border-dashed border-sky-300 bg-sky-50/40 py-3 text-sm font-medium text-sky-700 hover:bg-sky-50"
+              onClick={addItem}
+            >
+              ＋ 明細を追加
+            </button>
+            {lastUnitPrice > 0 && (
+              <p className="mt-2 text-[11px] text-slate-400">
+                追加する明細には、前回の単価 {yen(lastUnitPrice)}{" "}
+                円を反映します。
               </p>
-            ) : null}
-
-            <div className="mt-4 max-w-full overflow-x-auto rounded-lg border border-slate-200/90">
-              <table className="w-full min-w-[640px] border-collapse text-sm md:min-w-[720px] lg:min-w-[800px]">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/90 text-left text-xs font-medium text-slate-600">
-                    <th className="px-3 py-2.5">品目</th>
-                    <th className="px-3 py-2.5">単位</th>
-                    <th className="px-3 py-2.5 text-right">数量</th>
-                    <th className="px-3 py-2.5 text-right">単価（円）</th>
-                    <th className="px-3 py-2.5 text-right">金額（円）</th>
-                    <th className="px-3 py-2.5">備考</th>
-                    <th className="px-3 py-2.5 w-24"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fields.map((f, idx) => {
-                    const row = watchItems[idx];
-                    const edited = Boolean(row?.amountManuallyEdited);
-                    return (
-                      <tr key={f.id} className={["border-b border-slate-100", edited ? "bg-amber-50/60" : ""].join(" ")}>
-                        <td className="px-3 py-2 align-top">
-                          <input
-                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                            {...form.register(`items.${idx}.productName` as const)}
-                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "productName")}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <input
-                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                            {...form.register(`items.${idx}.unit` as const)}
-                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "unit")}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top text-right">
-                          <input
-                            inputMode="decimal"
-                            className="ml-auto w-24 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                            {...form.register(`items.${idx}.quantity` as const, {
-                              valueAsNumber: true,
-                              onBlur: () => normalizeQuantityOnBlur(idx),
-                            })}
-                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "quantity")}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top text-right">
-                          <Controller
-                            control={form.control}
-                            name={`items.${idx}.unitPrice` as const}
-                            render={({ field }) => (
-                              <input
-                                name={field.name}
-                                inputMode="numeric"
-                                className="ml-auto w-32 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                                value={field.value ? field.value.toLocaleString("ja-JP") : ""}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/,/g, "");
-                                  if (!/^\d*$/.test(raw)) return;
-                                  // 入力中は空欄を許容（表示は空、値は 0 として保持）
-                                  field.onChange(raw === "" ? 0 : Number(raw));
-                                }}
-                                onBlur={() => {
-                                  try {
-                                    if (field.value > 0) localStorage.setItem(LAST_UNIT_PRICE_KEY, String(field.value));
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                  field.onBlur();
-                                  recalcLineAmount(idx);
-                                }}
-                                onKeyDown={(e) => onItemFieldKeyDown(e, idx, "unitPrice")}
-                              />
-                            )}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top text-right">
-                          <Controller
-                            control={form.control}
-                            name={`items.${idx}.amount` as const}
-                            render={({ field }) => (
-                              <div>
-                                <input
-                                  name={field.name}
-                                  inputMode="numeric"
-                                  className={[
-                                    "ml-auto w-36 rounded-md border px-2 py-1.5 text-right tabular-nums focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15",
-                                    edited ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white",
-                                  ].join(" ")}
-                                  value={field.value ? field.value.toLocaleString("ja-JP") : ""}
-                                  onChange={(e) => {
-                                    const raw = e.target.value.replace(/,/g, "");
-                                    if (!/^\d*$/.test(raw)) return;
-                                    const n = raw === "" ? 0 : Number(raw);
-                                    form.setValue(`items.${idx}.amount`, toYenInt(n), { shouldValidate: true });
-                                    form.setValue(`items.${idx}.amountManuallyEdited`, true, { shouldValidate: true });
-                                  }}
-                                  onBlur={field.onBlur}
-                                  onKeyDown={(e) => onItemFieldKeyDown(e, idx, "amount")}
-                                />
-                                <div className="mt-1 flex justify-end">
-                                  {edited ? (
-                                    <button
-                                      type="button"
-                                      className="text-xs font-medium text-amber-800 hover:underline"
-                                      onClick={() => {
-                                        form.setValue(`items.${idx}.amountManuallyEdited`, false, { shouldValidate: true });
-                                        recalcLineAmount(idx);
-                                      }}
-                                    >
-                                      自動計算に戻す
-                                    </button>
-                                  ) : (
-                                    <span className="text-[11px] text-slate-400">自動</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          />
-                          <input type="hidden" {...form.register(`items.${idx}.amountManuallyEdited` as const)} />
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <input
-                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15"
-                            {...form.register(`items.${idx}.note` as const)}
-                            onKeyDown={(e) => onItemFieldKeyDown(e, idx, "note")}
-                          />
-                        </td>
-                        <td className="px-3 py-2 align-top text-right">
-                          <button
-                            type="button"
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-40"
-                            onClick={() => remove(idx)}
-                            disabled={fields.length <= 1}
-                            title={fields.length <= 1 ? "明細は1行以上必要です" : "行を削除"}
-                          >
-                            削除
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {form.formState.errors.items && (
-              <p className="mt-2 text-sm text-red-600">{form.formState.errors.items.message as string}</p>
             )}
-          </section>
-        </div>
-
-        {/* 右カラム：サマリー（固定幅・はみ出し防止） */}
-        <aside className="w-full min-w-0 space-y-4 lg:sticky lg:top-6 lg:w-[280px] lg:max-w-[280px] lg:shrink-0">
-          <div className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">ご請求金額（税込）</div>
-            <div className="mt-1 break-all text-2xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {yen(summary.grandTotal)}
-              <span className="ml-1 text-base font-medium text-slate-600 sm:text-lg">円</span>
-            </div>
-            <div className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-sm">
-              <div className="flex items-center justify-between gap-2 text-slate-600">
-                <span>税抜合計</span>
-                <span className="shrink-0 font-medium tabular-nums text-slate-900">{yen(summary.subtotal)}円</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-slate-600">
-                <span>消費税</span>
-                <span className="shrink-0 font-medium tabular-nums text-slate-900">{yen(summary.taxAmount)}円</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-slate-600">
-                <span>税込合計</span>
-                <span className="shrink-0 font-medium tabular-nums text-slate-900">{yen(summary.totalWithTax)}円</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-slate-600">
-                <span>源泉所得税</span>
-                <span className="shrink-0 font-medium tabular-nums text-slate-900">{yen(summary.withholdingTax)}円</span>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              <AutosaveStatus
-                state={statusWatch === "DRAFT" ? autosaveState : "idle"}
-                lastSavedAt={lastAutosaveAt}
-                hint={
-                  statusWatch !== "DRAFT"
-                    ? "下書き以外は自動保存しません。"
-                    : autosaveState === "error" && autosaveErrorDetail
-                      ? autosaveErrorDetail
-                      : "必須項目が揃うと自動保存が有効になります。"
-                }
-              />
-              <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
-                状態:{" "}
-                <span className="font-medium text-slate-900">
-                  {statusWatch === "DRAFT"
-                    ? "下書き"
-                    : statusWatch === "CONFIRMED"
-                      ? "確定"
-                      : "発行済み"}
+          </Section>
+          <Section
+            number="03"
+            title="税額と発行情報"
+            description="源泉徴収の有無と、請求書に記載する情報を確認します。"
+          >
+            <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg bg-slate-50 p-3">
+              <span>
+                <span className="block text-sm font-medium">
+                  源泉所得税を差し引く
                 </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  有効にすると、ご請求金額から控除します。
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-5 w-5 shrink-0 accent-sky-600"
+                {...form.register("withholdingEnabled")}
+              />
+            </label>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between text-slate-500">
+                <dt>税抜合計</dt>
+                <dd className="tabular-nums">{yen(summary.subtotal)} 円</dd>
               </div>
-            </div>
-
-            {serverError ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{serverError}</div>
-            ) : null}
-            {successMessage ? (
-              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                {successMessage}
+              <div className="flex justify-between text-slate-500">
+                <dt>消費税（{props.defaultTaxRateBps / 100}%）</dt>
+                <dd className="tabular-nums">{yen(summary.taxAmount)} 円</dd>
               </div>
-            ) : null}
-
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
-              >
-                {saving ? "保存中…" : mode === "create" ? "下書きを保存" : "変更を保存"}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void onIssue()}
-                className="w-full rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-              >
-                発行（ステータスを発行済みにして保存）
-              </button>
-              <p className="text-[11px] text-slate-500">
-                ※発行は保存処理を伴います。必要に応じて確定/発行の運用ルールを後から調整できます。
+              {values.withholdingEnabled && (
+                <div className="flex justify-between text-slate-500">
+                  <dt>源泉所得税</dt>
+                  <dd className="tabular-nums">
+                    −{yen(summary.withholdingTax)} 円
+                  </dd>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-slate-200 pt-3 font-semibold">
+                <dt>ご請求金額</dt>
+                <dd className="text-lg tabular-nums text-sky-700">
+                  {yen(summary.grandTotal)} 円
+                </dd>
+              </div>
+            </dl>
+            <details className="mt-5 border-t border-slate-100 pt-4">
+              <summary className="cursor-pointer text-xs font-medium text-slate-600">
+                発行元・振込先・保存ステータス
+              </summary>
+              <div className="mt-4 space-y-4 text-xs text-slate-600">
+                <p>発行元：{props.settings.companyName}</p>
+                <p>
+                  振込先：
+                  {[
+                    props.settings.bankName,
+                    props.settings.branchName,
+                    props.settings.accountNumber,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ") || "未設定"}
+                </p>
+                <a
+                  href="/settings"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block text-sky-700 underline"
+                >
+                  発行元・振込先の設定を開く ↗
+                </a>
+                <p className="text-[11px] text-slate-400">
+                  設定の変更後は、入力内容を保存してからこの画面を再読み込みしてください。
+                </p>
+                <Field id="status" label="保存ステータス">
+                  <select
+                    id="status"
+                    className={inputClass}
+                    {...form.register("status")}
+                  >
+                    <option value="DRAFT">下書き</option>
+                    <option value="CONFIRMED">確定</option>
+                    <option value="ISSUED">発行済み</option>
+                  </select>
+                </Field>
+              </div>
+            </details>
+          </Section>
+        </fieldset>
+        <aside
+          className={`min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-200/60 lg:sticky lg:top-6 ${mobileTab === "input" ? "hidden lg:block" : ""}`}
+          aria-label="完成プレビュー"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold">完成プレビュー</h2>
+              <p className="mt-1 text-[11px] text-slate-500">
+                A4 縦 · 入力内容をリアルタイムに反映
               </p>
             </div>
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              ライブ
+            </span>
+            <button
+              type="button"
+              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+              aria-pressed={previewZoomed}
+              onClick={() => setPreviewZoomed((v) => !v)}
+            >
+              {previewZoomed ? "全体表示" : "実寸で確認"}
+            </button>
           </div>
-
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600">
-            <div className="font-medium text-slate-800">ショートカット</div>
-            <ul className="mt-2 list-disc space-y-1 pl-4">
-              <li>明細テンプレートから行を一括追加</li>
-              <li>単価はカンマ表示（入力もカンマ可）</li>
-              <li>手修正行は色分けされます</li>
-            </ul>
+          <div className="max-h-[75vh] overflow-auto p-4 sm:p-5 lg:max-h-[calc(100vh-220px)]">
+            <InvoiceLivePreview
+              invoice={document}
+              settings={props.settings}
+              zoomed={previewZoomed}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3">
+            <p className="text-[11px] text-slate-500">
+              PDF・印刷では、最新の内容を保存して表示します。
+            </p>
+            <button
+              type="button"
+              disabled={saving}
+              className="text-xs font-semibold text-sky-700 hover:underline disabled:opacity-50"
+              onClick={() => void saveAndContinue("print")}
+            >
+              拡大・PDF・印刷 ↗
+            </button>
           </div>
         </aside>
       </div>
-
+      <div className="sticky bottom-3 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 sm:p-4 shadow-[0_4px_30px_rgba(15,23,42,0.12)] backdrop-blur">
+        {serverError && (
+          <p
+            role="alert"
+            className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {serverError}
+          </p>
+        )}
+        {successMessage && !dirty && (
+          <p
+            role="status"
+            className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
+          >
+            {successMessage}
+          </p>
+        )}
+        {validationAttempted && validationProblems.length > 0 && (
+          <p role="alert" className="mb-3 text-xs text-red-600">
+            入力内容をご確認ください：{validationProblems.join(" / ")}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-[10px] text-slate-500">ご請求金額</p>
+              <p className="text-xl font-bold tabular-nums tracking-tight">
+                {yen(summary.grandTotal)}
+                <span className="ml-1 text-xs font-normal">円</span>
+              </p>
+            </div>
+            <span
+              className="text-[10px] text-slate-500 sm:hidden"
+              role="status"
+            >
+              {saving
+                ? "保存中…"
+                : autosaveState === "error"
+                  ? "自動保存に失敗・保存で再試行"
+                  : !dirty && lastSavedAt
+                    ? "保存済み"
+                    : values.status === "DRAFT"
+                      ? "入力後に自動保存"
+                      : "変更後は保存してください"}
+            </span>
+            <div className="hidden sm:block">
+              <AutosaveStatus
+                state={
+                  values.status === "DRAFT"
+                    ? dirty && autosaveState === "saved"
+                      ? "waiting"
+                      : autosaveState
+                    : "idle"
+                }
+                lastSavedAt={lastSavedAt}
+                hint={
+                  values.status !== "DRAFT"
+                    ? "変更後は保存してください"
+                    : autosaveState === "error"
+                      ? "自動保存できません。保存ボタンで再試行してください"
+                      : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center [&>button]:px-2 [&>button]:text-xs sm:[&>button]:px-3.5 sm:[&>button]:text-sm">
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={saving}
+              onClick={() => void saveAndContinue("mail")}
+            >
+              Gmail下書き
+            </button>
+            <button type="submit" className={buttonClass} disabled={saving}>
+              {saving
+                ? "保存中…"
+                : values.status === "DRAFT"
+                  ? "下書きを保存"
+                  : "変更を保存"}
+            </button>
+            <button
+              type="button"
+              className={primaryClass}
+              disabled={saving || values.status === "ISSUED"}
+              onClick={() => void saveAndContinue("issue")}
+            >
+              {values.status === "ISSUED" ? "発行済み" : "発行する"}
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 hidden text-[10px] text-slate-400 sm:block">
+          下書きは必須項目の入力後に自動保存。「発行する」は発行済みとして保存します。メールはGmailで手動送信します。
+        </p>
+      </div>
       <InvoicePreviewModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        invoiceId={effectiveInvoiceId}
+        invoiceId={invoiceId}
       />
-
       <SendInvoiceMailModal
         open={mailOpen}
         onClose={() => setMailOpen(false)}
-        invoiceId={effectiveInvoiceId}
+        invoiceId={invoiceId}
         templates={props.mailTemplates}
       />
     </form>

@@ -1,59 +1,167 @@
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-function navActive(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function SidebarLink(props: { href: string; label: string }) {
+import { BrandLogo } from "@/components/brand/brand-logo";
+import { AppIcon, type IconName } from "@/components/ui/app-icon";
+export const navigation: {
+  href: string;
+  label: string;
+  icon: IconName;
+  group: string;
+}[] = [
+  {
+    href: "/dashboard",
+    label: "ダッシュボード",
+    icon: "home",
+    group: "ワークスペース",
+  },
+  {
+    href: "/invoices",
+    label: "請求書",
+    icon: "invoice",
+    group: "ワークスペース",
+  },
+  {
+    href: "/expenses",
+    label: "支払管理",
+    icon: "wallet",
+    group: "ワークスペース",
+  },
+  {
+    href: "/claims",
+    label: "経費精算",
+    icon: "wallet",
+    group: "ワークスペース",
+  },
+  {
+    href: "/accounting",
+    label: "会計・帳簿",
+    icon: "book",
+    group: "ワークスペース",
+  },
+  {
+    href: "/companies",
+    label: "取引先",
+    icon: "company",
+    group: "ワークスペース",
+  },
+  {
+    href: "/item-templates",
+    label: "明細テンプレート",
+    icon: "items",
+    group: "作成を効率化",
+  },
+  {
+    href: "/mail-templates",
+    label: "メールテンプレート",
+    icon: "mail",
+    group: "作成を効率化",
+  },
+  {
+    href: "/settings",
+    label: "自社情報・設定",
+    icon: "settings",
+    group: "管理",
+  },
+  { href: "/admin/users", label: "ユーザー管理", icon: "users", group: "管理" },
+  {
+    href: "/notifications",
+    label: "お知らせ",
+    icon: "mail",
+    group: "サポート",
+  },
+  { href: "/guide", label: "使い方ガイド", icon: "book", group: "サポート" },
+];
+export function SidebarContent(props: {
+  email: string;
+  showAdmin: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
-  const active = navActive(pathname, props.href);
-  return (
-    <Link
-      href={props.href}
-      className={[
-        "block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-        active
-          ? "bg-sky-50 text-sky-700"
-          : "text-slate-600 hover:bg-slate-100/90 hover:text-slate-900",
-      ].join(" ")}
-    >
-      {props.label}
-    </Link>
+  const entries = navigation.filter(
+    (n) => props.showAdmin || n.href !== "/admin/users",
   );
-}
-
-export function AppSidebar(props: { email: string; showAdmin: boolean }) {
   return (
-    <aside className="hidden w-[15.5rem] shrink-0 md:block">
-      <div className="sticky top-6 rounded-xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <div className="border-b border-slate-100 pb-4">
-          <div className="text-[13px] font-semibold leading-snug text-slate-900">請求書作成</div>
-          <div className="mt-1 truncate text-xs text-slate-500">{props.email}</div>
+    <div className="flex h-full flex-col px-5 pb-5 pt-8">
+      <Link
+        href="/dashboard"
+        aria-label="SEIQ ダッシュボード"
+        onClick={props.onNavigate}
+        className="px-2"
+      >
+        <BrandLogo light />
+      </Link>
+      <Link
+        href="/invoices/new"
+        onClick={props.onNavigate}
+        className="mt-9 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-3 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-200"
+      >
+        <AppIcon name="plus" />
+        請求書を作成
+      </Link>
+      <nav aria-label="メインメニュー" className="mt-6 flex-1 space-y-6">
+        {[...new Set(entries.map((n) => n.group))].map((group) => (
+          <div key={group}>
+            <p className="mb-2 px-3 text-[10px] font-medium tracking-widest text-slate-400">
+              {group}
+            </p>
+            <div className="space-y-1">
+              {entries
+                .filter((n) => n.group === group)
+                .map((n) => {
+                  const active =
+                    pathname === n.href || pathname.startsWith(n.href + "/");
+                  return (
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      aria-current={active ? "page" : undefined}
+                      onClick={props.onNavigate}
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors ${active ? "bg-white/10 text-emerald-200" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
+                    >
+                      <AppIcon name={n.icon} />
+                      {n.label}
+                      {active && (
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                      )}
+                    </Link>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+      </nav>
+      <div className="mt-8 border-t border-white/10 pt-5">
+        <div className="flex items-center gap-3 px-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-white">
+            {props.email.slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] text-slate-400">
+              {props.showAdmin ? "管理者アカウント" : "マイアカウント"}
+            </p>
+            <p
+              className="mt-0.5 truncate text-xs text-slate-200"
+              title={props.email}
+            >
+              {props.email}
+            </p>
+          </div>
         </div>
-
-        <nav className="mt-4 flex flex-col gap-0.5">
-          <SidebarLink href="/dashboard" label="ダッシュボード" />
-          <SidebarLink href="/invoices" label="請求書一覧" />
-          <SidebarLink href="/companies" label="会社一覧" />
-          <SidebarLink href="/item-templates" label="明細テンプレ" />
-          <SidebarLink href="/mail-templates" label="メールテンプレ" />
-          <SidebarLink href="/settings" label="設定" />
-          {props.showAdmin ? <SidebarLink href="/admin/users" label="ユーザー管理" /> : null}
-        </nav>
-
-        <form action="/api/auth/logout" method="post" className="mt-6 border-t border-slate-100 pt-4">
-          <button
-            type="submit"
-            className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-          >
+        <form action="/api/auth/logout" method="post" className="mt-3">
+          <button className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-xs text-slate-400 hover:bg-white/5 hover:text-white">
+            <AppIcon name="logout" className="h-4 w-4" />
             ログアウト
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+export function AppSidebar(props: { email: string; showAdmin: boolean }) {
+  return (
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] overflow-y-auto bg-[#132b32] lg:block">
+      <SidebarContent {...props} />
     </aside>
   );
 }

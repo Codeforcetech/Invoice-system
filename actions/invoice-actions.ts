@@ -1,11 +1,18 @@
 "use server";
 
+import { accountingLock } from "@/lib/accounting/service";
+import { syncInvoice } from "@/lib/accounting/sync";
+import { japanToday } from "@/lib/expenses/model";
+import { invoiceDateFilter } from "@/lib/dashboard/sales";
 import { InvoiceStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
 import { requireUser } from "@/lib/auth/require-user";
-import { invoiceUpsertSchema, type InvoiceUpsertInput } from "@/lib/validators/invoice";
+import {
+  invoiceUpsertSchema,
+  type InvoiceUpsertInput,
+} from "@/lib/validators/invoice";
 import { calculateInvoice } from "@/lib/invoice/calculateInvoice";
 import { generateInvoiceNumber } from "@/lib/invoice/generateInvoiceNumber";
 import { generateShareToken } from "@/lib/invoice/generateShareToken";
@@ -50,7 +57,11 @@ function buildNormalizedItems(input: InvoiceUpsertInput) {
   });
 }
 
-function buildCalc(normalizedItems: ReturnType<typeof buildNormalizedItems>, taxRateBps: number, withholdingEnabled: boolean) {
+function buildCalc(
+  normalizedItems: ReturnType<typeof buildNormalizedItems>,
+  taxRateBps: number,
+  withholdingEnabled: boolean,
+) {
   return calculateInvoice({
     items: normalizedItems.map((it) => ({
       quantity: Number(it.quantity),
@@ -64,10 +75,13 @@ function buildCalc(normalizedItems: ReturnType<typeof buildNormalizedItems>, tax
 }
 
 export type InvoiceListFilters = {
+  fromMonth?: string;
+  toMonth?: string;
   companyId?: string;
   q?: string;
   status?: InvoiceStatus | "ALL";
   withholding?: "ALL" | "ON" | "OFF";
+  receipt?: "ALL" | "PAID" | "UNPAID" | "OVERDUE";
 };
 
 export async function listInvoices(filters: InvoiceListFilters = {}) {
@@ -75,17 +89,39 @@ export async function listInvoices(filters: InvoiceListFilters = {}) {
 
   const where: Prisma.InvoiceWhereInput = {
     createdById: user.id,
+    mergedIntoId: null,
   };
 
+  const dateFilter = invoiceDateFilter(filters.fromMonth, filters.toMonth);
+  if (dateFilter) where.issueDate = dateFilter;
   if (filters.companyId) where.companyId = filters.companyId;
-  if (filters.q) where.subject = { contains: filters.q, mode: "insensitive" };
-  if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  if (filters.q?.trim()) {
+    const term = filters.q.trim().slice(0, 200);
+    where.OR = [
+      { subject: { contains: term, mode: "insensitive" } },
+      { invoiceNumber: { contains: term, mode: "insensitive" } },
+      { company: { name: { contains: term, mode: "insensitive" } } },
+    ];
+  }
+  if (
+    filters.status === "DRAFT" ||
+    filters.status === "CONFIRMED" ||
+    filters.status === "ISSUED"
+  )
+    where.status = filters.status;
   if (filters.withholding === "ON") where.withholdingEnabled = true;
   if (filters.withholding === "OFF") where.withholdingEnabled = false;
 
+  if (["PAID", "UNPAID", "OVERDUE"].includes(filters.receipt ?? "")) {
+    where.status = "ISSUED";
+    where.receivedDate = filters.receipt === "PAID" ? { not: null } : null;
+    if (filters.receipt === "OVERDUE")
+      where.dueDate = { lt: new Date(japanToday()) };
+  }
+
   return prisma.invoice.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: { updatedAt: "desc" },
     select: {
       id: true,
       invoiceNumber: true,
@@ -95,7 +131,11 @@ export async function listInvoices(filters: InvoiceListFilters = {}) {
       grandTotal: true,
       withholdingEnabled: true,
       status: true,
+      receivedDate: true,
+      receiptMatchId: true,
+      mergedIntoId: true,
       createdAt: true,
+      updatedAt: true,
       company: { select: { id: true, name: true } },
     },
   });
@@ -122,6 +162,9 @@ export async function getInvoice(params: { invoiceId: string }) {
       withholdingTax: true,
       grandTotal: true,
       status: true,
+      receivedDate: true,
+      receiptMatchId: true,
+      mergedIntoId: true,
       createdAt: true,
       updatedAt: true,
       autosaveUpdatedAt: true,
@@ -170,6 +213,7 @@ export async function createInvoice(raw: unknown) {
 
   try {
     return await prisma.$transaction(async (tx) => {
+      await accountingLock(tx,user.id);
       const company = await tx.company.findFirst({
         where: { id: input.companyId, userId: user.id },
         select: { id: true },
@@ -177,7 +221,11 @@ export async function createInvoice(raw: unknown) {
       if (!company) throw new Error("FORBIDDEN_COMPANY");
 
       const normalizedItems = buildNormalizedItems(input);
-      const calc = buildCalc(normalizedItems, taxRateBps, input.withholdingEnabled);
+      const calc = buildCalc(
+        normalizedItems,
+        taxRateBps,
+        input.withholdingEnabled,
+      );
 
       const invoiceNumber = await generateInvoiceNumber({
         prisma: tx,
@@ -212,9 +260,11 @@ export async function createInvoice(raw: unknown) {
             })),
           },
         },
-        select: { id: true },
+        select: { id: true, invoiceNumber: true },
       });
 
+      await syncInvoice(tx,user.id,created.id);
+      revalidatePath("/accounting", "layout");
       revalidatePath("/invoices");
       revalidatePath(`/companies/${input.companyId}`);
       revalidatePath(`/invoices/${created.id}`);
@@ -228,19 +278,36 @@ export async function createInvoice(raw: unknown) {
   }
 }
 
-export async function updateInvoice(params: { invoiceId: string; data: unknown }) {
+export async function updateInvoice(params: {
+  invoiceId: string;
+  data: unknown;
+}) {
   const user = await requireUser();
-  const input = invoiceUpsertSchema.parse(params.data) satisfies InvoiceUpsertInput;
+  const input = invoiceUpsertSchema.parse(
+    params.data,
+  ) satisfies InvoiceUpsertInput;
 
   const settings = await getOrCreateSystemSetting(user.id);
   const taxRateBps = settings.taxRate;
 
   return prisma.$transaction(async (tx) => {
+      await accountingLock(tx,user.id);
     const invoice = await tx.invoice.findFirst({
       where: { id: params.invoiceId, createdById: user.id },
-      select: { id: true, companyId: true },
+      select: {
+        id: true,
+        companyId: true,
+        invoiceNumber: true,
+        receivedDate: true,
+        mergedIntoId: true,
+      },
     });
     if (!invoice) throw new Error("FORBIDDEN_INVOICE");
+    if (invoice.mergedIntoId) throw new Error("合算済みの請求書は編集できません。");
+    if (invoice.receivedDate)
+      throw new Error(
+        "入金済みの請求書は編集できません。入金記録を取り消してから編集してください。",
+      );
 
     const company = await tx.company.findFirst({
       where: { id: input.companyId, userId: user.id },
@@ -249,13 +316,17 @@ export async function updateInvoice(params: { invoiceId: string; data: unknown }
     if (!company) throw new Error("FORBIDDEN_COMPANY");
 
     const normalizedItems = buildNormalizedItems(input);
-    const calc = buildCalc(normalizedItems, taxRateBps, input.withholdingEnabled);
+    const calc = buildCalc(
+      normalizedItems,
+      taxRateBps,
+      input.withholdingEnabled,
+    );
 
     await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
 
     const now = new Date();
     await tx.invoice.update({
-      where: { id: invoice.id },
+      where: { id: invoice.id, createdById: user.id, receivedDate: null },
       data: {
         companyId: input.companyId,
         subject: input.subject,
@@ -280,17 +351,22 @@ export async function updateInvoice(params: { invoiceId: string; data: unknown }
       select: { id: true },
     });
 
+    await syncInvoice(tx,user.id,invoice.id);
+    revalidatePath("/accounting", "layout");
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${invoice.id}`);
     revalidatePath(`/companies/${input.companyId}`);
-    return { id: invoice.id };
+    return { id: invoice.id, invoiceNumber: invoice.invoiceNumber };
   });
 }
 
 /**
  * 下書き（DRAFT）のみ自動保存。バリデーション未充足時は no-op。
  */
-export async function saveInvoiceAutosave(params: { invoiceId?: string | null; data: unknown }) {
+export async function saveInvoiceAutosave(params: {
+  invoiceId?: string | null;
+  data: unknown;
+}) {
   const parsed = invoiceUpsertSchema.safeParse(params.data);
   if (!parsed.success) {
     return { ok: false as const, reason: "invalid" as const };
@@ -301,13 +377,24 @@ export async function saveInvoiceAutosave(params: { invoiceId?: string | null; d
   }
 
   if (params.invoiceId) {
-    await updateInvoice({ invoiceId: params.invoiceId, data: input });
-    return { ok: true as const, invoiceId: params.invoiceId };
+    const updated = await updateInvoice({
+      invoiceId: params.invoiceId,
+      data: input,
+    });
+    return {
+      ok: true as const,
+      invoiceId: updated.id,
+      invoiceNumber: updated.invoiceNumber,
+    };
   }
 
   try {
     const created = await createInvoice(input);
-    return { ok: true as const, invoiceId: created.id };
+    return {
+      ok: true as const,
+      invoiceId: created.id,
+      invoiceNumber: created.invoiceNumber,
+    };
   } catch (e) {
     if (e instanceof Error && e.message === INVOICE_NUMBER_CONFLICT_MESSAGE) {
       return { ok: false as const, reason: "number_conflict" as const };
@@ -316,7 +403,9 @@ export async function saveInvoiceAutosave(params: { invoiceId?: string | null; d
   }
 }
 
-export async function duplicateInvoice(params: { invoiceId: string }): Promise<{ id: string }> {
+export async function duplicateInvoice(params: {
+  invoiceId: string;
+}): Promise<{ id: string }> {
   const user = await requireUser();
 
   const settings = await getOrCreateSystemSetting(user.id);
@@ -324,6 +413,7 @@ export async function duplicateInvoice(params: { invoiceId: string }): Promise<{
 
   try {
     return await prisma.$transaction(async (tx) => {
+      await accountingLock(tx,user.id);
       const src = await tx.invoice.findFirst({
         where: { id: params.invoiceId, createdById: user.id },
         include: { items: { orderBy: { sortOrder: "asc" } } },
@@ -333,7 +423,9 @@ export async function duplicateInvoice(params: { invoiceId: string }): Promise<{
       const today = startOfToday();
       const due = addDays(today, 30);
       const subjectBase = src.subject.trimEnd();
-      const subject = subjectBase.endsWith("（複製）") ? subjectBase : `${subjectBase}（複製）`;
+      const subject = subjectBase.endsWith("（複製）")
+        ? subjectBase
+        : `${subjectBase}（複製）`;
 
       const invoiceNumber = await generateInvoiceNumber({
         prisma: tx,

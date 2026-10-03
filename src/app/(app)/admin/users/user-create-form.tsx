@@ -38,22 +38,22 @@ export function UserCreateForm() {
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label className={labelClass}>氏名</label>
-        <input className={`mt-1.5 ${inputClass}`} {...form.register("name")} />
+        <label htmlFor="field-name" className={labelClass}>氏名</label>
+        <input id="field-name" className={`mt-1.5 ${inputClass}`} {...form.register("name")} />
         {form.formState.errors.name && (
           <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
         )}
       </div>
       <div>
-        <label className={labelClass}>メールアドレス</label>
-        <input type="email" className={`mt-1.5 ${inputClass}`} {...form.register("email")} />
+        <label htmlFor="field-email" className={labelClass}>メールアドレス</label>
+        <input id="field-email" type="email" className={`mt-1.5 ${inputClass}`} {...form.register("email")} />
         {form.formState.errors.email && (
           <p className="mt-1 text-sm text-red-600">{form.formState.errors.email.message}</p>
         )}
       </div>
       <div>
-        <label className={labelClass}>初期パスワード</label>
-        <input type="password" className={`mt-1.5 ${inputClass}`} {...form.register("password")} />
+        <label htmlFor="field-password" className={labelClass}>初期パスワード</label>
+        <input id="field-password" type="password" className={`mt-1.5 ${inputClass}`} {...form.register("password")} />
         {form.formState.errors.password && (
           <p className="mt-1 text-sm text-red-600">{form.formState.errors.password.message}</p>
         )}
@@ -67,10 +67,10 @@ export function UserCreateForm() {
       </div>
 
       {err ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
       ) : null}
       {ok ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div>
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div>
       ) : null}
 
       <div className="flex justify-end pt-1">

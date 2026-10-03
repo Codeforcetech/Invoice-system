@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
-import { buildSessionToken, SESSION_COOKIE_NAME, sessionCookieOptions } from "@/lib/auth/session";
+import {
+  buildSessionToken,
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+} from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 
 /** HTMLフォーム POST 後は 303 にし、追従リクエストを GET にする（307 だと POST /login で 405 になる） */
 function redirectAfterForm(url: URL) {
-  return NextResponse.redirect(url, 303);
+  // Stay on the submitted origin (localhost and 127.0.0.1 use different cookies).
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: url.pathname + url.search },
+  });
 }
 
 export async function POST(req: Request) {
@@ -19,12 +27,15 @@ export async function POST(req: Request) {
     select: { id: true, passwordHash: true, role: true },
   });
   if (!user) {
-    return redirectAfterForm(new URL("/login", req.url));
+    return redirectAfterForm(new URL("/login?error=invalid", req.url));
   }
 
-  const ok = await verifyPassword({ password, passwordHash: user.passwordHash });
+  const ok = await verifyPassword({
+    password,
+    passwordHash: user.passwordHash,
+  });
   if (!ok) {
-    return redirectAfterForm(new URL("/login", req.url));
+    return redirectAfterForm(new URL("/login?error=invalid", req.url));
   }
 
   const token = await buildSessionToken({ userId: user.id, role: user.role });

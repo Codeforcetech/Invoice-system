@@ -5,6 +5,7 @@ const maxMap = {
   "5xl": "max-w-5xl",
   "6xl": "max-w-6xl",
   "7xl": "max-w-7xl",
+  full: "max-w-none",
 } as const;
 
 export type PageShellMax = keyof typeof maxMap;
@@ -18,13 +19,13 @@ export function PageShell(props: {
   maxWidth?: PageShellMax;
   className?: string;
 }) {
-  const max = maxMap[props.maxWidth ?? "6xl"];
+  const max = maxMap[props.maxWidth ?? "7xl"];
   return (
     <div
       className={[
-        "mx-auto flex w-full min-w-0 flex-col gap-8",
+        "mx-auto flex w-full min-w-0 flex-col gap-6",
         max,
-        "px-4 py-6 sm:px-5 md:py-8",
+        "px-4 py-6 sm:px-7 lg:px-8 lg:py-8",
         props.className ?? "",
       ]
         .filter(Boolean)

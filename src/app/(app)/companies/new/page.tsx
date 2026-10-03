@@ -9,7 +9,7 @@ export default async function NewCompanyPage() {
     <PageShell maxWidth="4xl">
       <SectionHeader
         variant="page"
-        title="会社作成"
+        title="取引先を追加"
         description="請求書の発行先となる会社を登録します。"
         action={
           <AppButtonLink href="/companies" variant="secondary">

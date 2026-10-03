@@ -83,15 +83,15 @@ export function CompanyForm(props: {
   const basicFields = (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="md:col-span-2">
-        <label className={labelClass}>会社名</label>
-        <input className={`mt-1.5 ${inputClass}`} {...form.register("name")} />
+        <label htmlFor="field-name" className={labelClass}>会社名</label>
+        <input id="field-name" className={`mt-1.5 ${inputClass}`} {...form.register("name")} />
         {form.formState.errors.name && (
           <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
         )}
       </div>
       <div>
-        <label className={labelClass}>会社コード（採番用）</label>
-        <input
+        <label htmlFor="field-invoiceCode" className={labelClass}>会社コード（採番用）</label>
+        <input id="field-invoiceCode"
           className={`mt-1.5 font-mono ${inputClass}`}
           placeholder="例) CODEFORCE"
           {...form.register("invoiceCode")}
@@ -103,10 +103,10 @@ export function CompanyForm(props: {
         )}
       </div>
       <div>
-        <label className={labelClass}>デフォルト支払期限</label>
+        <label htmlFor="field-defaultDueDays" className={labelClass}>デフォルト支払期限</label>
         <div className="mt-1.5 flex items-center gap-2">
           <span className="shrink-0 text-sm text-slate-600">請求日から</span>
-          <input
+          <input id="field-defaultDueDays"
             type="number"
             min={1}
             max={365}
@@ -125,8 +125,8 @@ export function CompanyForm(props: {
   const billingFields = (
     <div className="grid grid-cols-1 gap-4">
       <div>
-        <label className={labelClass}>よく使う件名</label>
-        <input
+        <label htmlFor="field-commonSubject" className={labelClass}>よく使う件名</label>
+        <input id="field-commonSubject"
           className={`mt-1.5 ${inputClass}`}
           placeholder="例）2026年4月分 システム保守費"
           {...form.register("commonSubject")}
@@ -134,8 +134,8 @@ export function CompanyForm(props: {
         <p className="mt-1 text-xs text-slate-500">請求書作成時の件名の初期値候補として使われます。</p>
       </div>
       <div>
-        <label className={labelClass}>振込条件・備考</label>
-        <textarea
+        <label htmlFor="field-paymentTerms" className={labelClass}>振込条件・備考</label>
+        <textarea id="field-paymentTerms"
           className={`mt-1.5 ${textareaClass}`}
           rows={4}
           placeholder="例）月末締め翌月末払い。振込手数料は貴社ご負担でお願いいたします。"
@@ -149,8 +149,8 @@ export function CompanyForm(props: {
   const mailFields = (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div>
-        <label className={labelClass}>請求書送付先（To）</label>
-        <input
+        <label htmlFor="field-billingEmail" className={labelClass}>請求書送付先（To）</label>
+        <input id="field-billingEmail"
           type="email"
           className={`mt-1.5 ${inputClass}`}
           placeholder="billing@example.com"
@@ -161,8 +161,8 @@ export function CompanyForm(props: {
         )}
       </div>
       <div>
-        <label className={labelClass}>CC（任意）</label>
-        <input
+        <label htmlFor="field-billingCcEmail" className={labelClass}>CC（任意）</label>
+        <input id="field-billingCcEmail"
           type="email"
           className={`mt-1.5 ${inputClass}`}
           placeholder="cc@example.com"
@@ -198,10 +198,10 @@ export function CompanyForm(props: {
       )}
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       ) : null}
       {ok ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{ok}</div>
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{ok}</div>
       ) : null}
 
       <div className="flex justify-end border-t border-slate-100 pt-6">
@@ -210,7 +210,7 @@ export function CompanyForm(props: {
           className="rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
           disabled={saving}
         >
-          {saving ? "保存中…" : mode === "create" ? "会社を作成" : "変更を保存"}
+          {saving ? "保存中…" : mode === "create" ? "取引先を登録" : "変更を保存"}
         </button>
       </div>
     </form>
