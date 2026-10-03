@@ -105,6 +105,9 @@ export default async function AccountingPage({
             <AppButtonLink href="/accounting/assets" variant="secondary">
               固定資産
             </AppButtonLink>
+            <AppButtonLink href="/accounting/evidence" variant="secondary">
+              証憑ファイルボックス
+            </AppButtonLink>
           </div>
           <p className="text-xs text-slate-500">
             会計開始日 {dateText(setting.startDate)} ／ 円・税込経理 ／

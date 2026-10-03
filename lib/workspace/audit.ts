@@ -19,6 +19,7 @@ export const auditEntityLabel: Record<string, string> = {
   USER: "ユーザー",
   TEMPLATE: "テンプレート",
   MAIL: "メール",
+  EVIDENCE: "証憑",
 };
 
 /**
@@ -29,7 +30,12 @@ export const auditEntityLabel: Record<string, string> = {
 export async function recordAudit(
   db: Db,
   who: { ownerId: string; userId: string },
-  event: { action: string; entity: string; entityId?: string | null; summary: string },
+  event: {
+    action: string;
+    entity: string;
+    entityId?: string | null;
+    summary: string;
+  },
 ) {
   return db.auditLog.create({
     data: {

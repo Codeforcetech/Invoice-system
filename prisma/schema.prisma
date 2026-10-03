@@ -37,6 +37,7 @@ model User {
   workspaceMembership    WorkspaceMember?        @relation("WorkspaceMemberUser")
   auditLogsOwned         AuditLog[]              @relation("AuditOwner")
   auditLogsActed         AuditLog[]              @relation("AuditActor")
+  evidenceOwned          EvidenceFile[]          @relation("EvidenceOwner")
 }
 
 // A workspace is identified by its owner's user id, so existing ownership columns
@@ -577,4 +578,57 @@ model NotificationPreference {
   userId       String  @id
   emailEnabled Boolean @default(false)
   user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// 電子取引の証憑（領収書・請求書など）。ファイルは受け取ったまま保存し、後から変更・削除できない。
+// 取引年月日・金額・取引先で検索できる。訂正と無効化は EvidenceHistory に残る。
+model EvidenceFile {
+  id              String            @id @default(cuid())
+  ownerId         String
+  kind            String
+  transactionDate DateTime          @db.Date
+  amount          Int
+  counterparty    String
+  /// 検索用に正規化した取引先（全角半角・大小文字・空白をそろえたもの）
+  counterpartyKey String
+  memo            String            @default("")
+  filename        String
+  mimeType        String
+  size            Int
+  sha256          String
+  data            Bytes
+  status          String            @default("ACTIVE")
+  voidReason      String?
+  voidedAt        DateTime?
+  voidedById      String?
+  uploadedById    String
+  /// 取り込み元（支払いの添付PDFなど）。同じ元を二重に取り込まないために使う
+  sourceType      String?
+  sourceId        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  owner           User              @relation("EvidenceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  history         EvidenceHistory[]
+
+  @@unique([ownerId, sourceType, sourceId])
+  @@index([ownerId, transactionDate])
+  @@index([ownerId, amount])
+  @@index([ownerId, counterpartyKey])
+}
+
+// 追記専用。登録・訂正・無効化の履歴。
+model EvidenceHistory {
+  id         String       @id @default(cuid())
+  evidenceId String
+  ownerId    String
+  actorId    String
+  action     String
+  reason     String       @default("")
+  before     Json?
+  after      Json?
+  createdAt  DateTime     @default(now())
+  evidence   EvidenceFile @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+
+  @@index([evidenceId, createdAt])
+  @@index([ownerId, createdAt])
 }
