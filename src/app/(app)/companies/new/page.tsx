@@ -1,3 +1,4 @@
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { CompanyForm } from "@/app/(app)/companies/_components/company-form";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 
 export default async function NewCompanyPage() {
+  await requireWorkspacePage("EDITOR");
   return (
     <PageShell maxWidth="4xl">
       <SectionHeader

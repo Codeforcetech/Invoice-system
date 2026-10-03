@@ -1,7 +1,9 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
+import { z } from "zod";
 import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { invoicePdfFilename } from "@/lib/gmail/mime";
 import { invoiceDocumentVersion } from "@/lib/pdf/version";
@@ -44,4 +46,29 @@ export async function getInvoiceMailDefaults(params: { invoiceId: string }) {
       print_url: "添付の請求書PDFをご確認ください。",
     } satisfies Record<string, string>,
   };
+}
+
+/**
+ * The Gmail draft is created in the user's browser, so this records what the browser
+ * reports. It does not prove that the draft exists or was sent.
+ */
+export async function recordInvoiceMailDraft(raw: unknown) {
+  const ws = await requireWorkspace("EDITOR");
+  const v = z
+    .object({ invoiceId: z.string().min(1).max(100), outcome: z.enum(["CREATED", "UNKNOWN"]) })
+    .parse(raw);
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: v.invoiceId, createdById: ws.ownerId },
+    select: { id: true, invoiceNumber: true },
+  });
+  if (!invoice) throw new Error("請求書が見つかりません");
+  await recordAudit(prisma, ws, {
+    action: v.outcome === "CREATED" ? "MAIL_DRAFT" : "MAIL_DRAFT_UNKNOWN",
+    entity: "MAIL",
+    entityId: invoice.id,
+    summary:
+      v.outcome === "CREATED"
+        ? `請求書 ${invoice.invoiceNumber} のGmail下書きを作成（ブラウザからの報告）`
+        : `請求書 ${invoice.invoiceNumber} のGmail下書きの作成結果が不明（要確認）`,
+  });
 }

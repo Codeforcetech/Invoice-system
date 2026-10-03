@@ -15,7 +15,13 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { inputClass, selectClass } from "@/lib/ui/form-classes";
 const yen = (value: number) => `¥${value.toLocaleString("ja-JP")}`;
-export function ExpensesView({ rows }: { rows: ExpenseRow[] }) {
+export function ExpensesView({
+  rows,
+  canEdit = true,
+}: {
+  rows: ExpenseRow[];
+  canEdit?: boolean;
+}) {
   const sp = useSearchParams(),
     today = japanToday(),
     current = today.slice(0, 7);
@@ -79,7 +85,9 @@ export function ExpensesView({ rows }: { rows: ExpenseRow[] }) {
         title="支払管理"
         description="いくら使ったか、いつ支払うかを、ひとつの場所で。"
         action={
-          <AppButtonLink href="/expenses/new">＋ 支払いを登録</AppButtonLink>
+          canEdit ? (
+            <AppButtonLink href="/expenses/new">＋ 支払いを登録</AppButtonLink>
+          ) : undefined
         }
       />
       {sp.get("saved") === "1" && (
@@ -432,12 +440,14 @@ export function ExpensesView({ rows }: { rows: ExpenseRow[] }) {
             <p className="mt-2 text-sm text-slate-500">
               条件を変更するか、最初の支払いを登録してください。
             </p>
-            <Link
-              href="/expenses/new"
-              className="mt-4 inline-block rounded-lg bg-[#183d44] px-5 py-3 text-sm text-white"
-            >
-              ＋ 支払いを登録
-            </Link>
+            {canEdit && (
+              <Link
+                href="/expenses/new"
+                className="mt-4 inline-block rounded-lg bg-[#183d44] px-5 py-3 text-sm text-white"
+              >
+                ＋ 支払いを登録
+              </Link>
+            )}
           </div>
         )}
         {pages > 1 && (

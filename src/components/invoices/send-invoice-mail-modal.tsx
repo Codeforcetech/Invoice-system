@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MailTemplate } from "@prisma/client";
-import { getInvoiceMailDefaults } from "@/actions/invoice-mail-actions";
+import {
+  getInvoiceMailDefaults,
+  recordInvoiceMailDraft,
+} from "@/actions/invoice-mail-actions";
 import { applyTemplateVars } from "@/lib/mail/applyTemplateVars";
 import {
   draftInputSchema,
@@ -198,8 +201,20 @@ function GmailComposer(props: Props & { invoiceId: string }) {
         defaults.invoiceNumber,
       );
       setCreatedUrl(draft.url);
+      if (props.invoiceId)
+        void recordInvoiceMailDraft({
+          invoiceId: props.invoiceId,
+          outcome: "CREATED",
+        }).catch(() => undefined);
     } catch (e) {
-      if (e instanceof DraftResultUnknownError) setUnknown(true);
+      if (e instanceof DraftResultUnknownError) {
+        setUnknown(true);
+        if (props.invoiceId)
+          void recordInvoiceMailDraft({
+            invoiceId: props.invoiceId,
+            outcome: "UNKNOWN",
+          }).catch(() => undefined);
+      }
       setError(
         e instanceof Error ? e.message : "下書きを作成できませんでした。",
       );

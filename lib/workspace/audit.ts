@@ -15,6 +15,10 @@ export const auditEntityLabel: Record<string, string> = {
   STATEMENT: "明細取込",
   REPORT: "レポート",
   EXPORT: "出力",
+  SESSION: "ログイン",
+  USER: "ユーザー",
+  TEMPLATE: "テンプレート",
+  MAIL: "メール",
 };
 
 /**
@@ -37,4 +41,20 @@ export async function recordAudit(
       summary: event.summary.slice(0, 300),
     },
   });
+}
+
+/**
+ * For events with no business transaction to join (sign-in, sign-out, failed sign-in).
+ * A logging failure must not lock people out, so it is reported to the server log only.
+ */
+export async function recordAuditSafely(
+  db: Db,
+  who: { ownerId: string; userId: string },
+  event: Parameters<typeof recordAudit>[2],
+) {
+  try {
+    await recordAudit(db, who, event);
+  } catch (e) {
+    console.error("audit log write failed", e instanceof Error ? e.message : e);
+  }
 }

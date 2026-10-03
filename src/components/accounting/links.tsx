@@ -44,6 +44,7 @@ type Expense = {
   version: string;
 };
 type Props = {
+  canEdit?: boolean;
   startDate: string;
   invoices: Invoice[];
   expenses: Expense[];
@@ -317,9 +318,11 @@ export function AccountingLinks(p: Props) {
           <CardSection>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">未払いの支払予定</h2>
-              <AppButtonLink href="/expenses/new">
-                ＋ 支払いを登録
-              </AppButtonLink>
+              {p.canEdit !== false && (
+                <AppButtonLink href="/expenses/new">
+                  ＋ 支払いを登録
+                </AppButtonLink>
+              )}
             </div>
             <p className="my-4 text-sm text-slate-600">
               仕入は買掛金、それ以外は未払金で計上します。費用は対象月の1日、出金は実際の支払日で記録します。

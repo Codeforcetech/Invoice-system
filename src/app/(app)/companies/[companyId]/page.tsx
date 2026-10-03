@@ -1,4 +1,6 @@
 import { getCompany } from "@/actions/company-actions";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { CompanyForm } from "@/app/(app)/companies/_components/company-form";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
@@ -6,6 +8,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 
 export default async function CompanyDetailPage(props: { params: Promise<{ companyId: string }> }) {
+  const ws = await requireWorkspacePage("VIEWER");
   const { companyId } = await props.params;
   const company = await getCompany({ companyId });
 
@@ -20,7 +23,9 @@ export default async function CompanyDetailPage(props: { params: Promise<{ compa
             <AppButtonLink href="/companies" variant="secondary">
               一覧へ
             </AppButtonLink>
-            <AppButtonLink href={`/invoices/new?companyId=${company.id}`}>この取引先の請求書を作成</AppButtonLink>
+            {hasRole(ws.role, "EDITOR") && (
+              <AppButtonLink href={`/invoices/new?companyId=${company.id}`}>この取引先の請求書を作成</AppButtonLink>
+            )}
           </>
         }
       />

@@ -1,4 +1,6 @@
 import { ExpenseForm } from "@/components/expenses/expense-form";
-export default function NewExpensePage() {
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+export default async function NewExpensePage() {
+  await requireWorkspacePage("EDITOR");
   return <ExpenseForm />;
 }

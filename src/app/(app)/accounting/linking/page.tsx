@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { redirect } from "next/navigation";
 import { dateText, invoiceDateText } from "@/lib/accounting/model";
 import { PageShell } from "@/components/ui/page-shell";
@@ -104,6 +105,7 @@ export default async function LinkingPage({
         </p>
       )}
       <AccountingLinks
+        canEdit={hasRole(ws.role, "EDITOR")}
         startDate={dateText(setting.startDate)}
         invoices={invoices.slice(0, 500).map((i) => ({
           id: i.id,
