@@ -1,3 +1,5 @@
+import { invoiceTaxGroups, itemTaxMark } from "@/lib/invoice/taxBreakdown";
+import { hasTaxCategories } from "@/lib/invoice/calculateInvoice";
 import { InvoiceReceipt } from "@/components/invoices/invoice-receipt";
 import type { MailTemplate, Prisma } from "@prisma/client";
 import { InvoiceStatusBadge } from "@/app/(app)/invoices/_components/invoice-status-badge";
@@ -37,6 +39,7 @@ type InvoiceDetailData = {
     unitPrice: number;
     amount: number;
     amountManuallyEdited: boolean;
+    taxCategory?: string | null;
     note: string | null;
   }[];
 };
@@ -159,6 +162,19 @@ export function InvoiceDetail(props: {
                       </td>
                       <td className="px-3 py-2 text-sm text-slate-900">
                         {it.productName}
+                        {(() => {
+                          const mark = itemTaxMark(it, inv);
+                          return (
+                            <>
+                              {mark.reduced ? " ※" : ""}
+                              {mark.note ? (
+                                <span className="ml-1 text-xs text-slate-500">
+                                  （{mark.note}）
+                                </span>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2 text-sm text-slate-900">
                         {it.unit ?? ""}
@@ -212,6 +228,20 @@ export function InvoiceDetail(props: {
                 {yen(inv.subtotal)}円
               </span>
             </div>
+            {hasTaxCategories(inv.items) &&
+              invoiceTaxGroups(inv).map((g) => (
+                <div
+                  key={g.key}
+                  className={`flex items-center justify-between ${innerBox}`}
+                >
+                  <span className="text-sm text-slate-600">
+                    {g.label}対象 {yen(g.subtotal)}円
+                  </span>
+                  <span className="text-sm text-slate-900">
+                    消費税 {yen(g.taxAmount)}円
+                  </span>
+                </div>
+              ))}
             <div className={`flex items-center justify-between ${innerBox}`}>
               <span className="text-sm text-slate-600">消費税</span>
               <span className="text-sm font-semibold text-slate-900">

@@ -24,7 +24,11 @@ import {
   invoiceUpsertSchema,
   type InvoiceUpsertInput,
 } from "@/lib/validators/invoice";
-import { calculateInvoice } from "@/lib/invoice/calculateInvoice";
+import {
+  calculateInvoice,
+  hasTaxCategories,
+} from "@/lib/invoice/calculateInvoice";
+import { TAX_CATEGORIES, taxCategoryInfo } from "@/lib/tax/categories";
 import {
   createInvoice,
   updateInvoice,
@@ -762,6 +766,36 @@ export function InvoiceForm(props: {
                       {moneyInput(idx, "amount")}
                     </Field>
                   </div>
+                  <div className="mt-3">
+                    <Field
+                      id={`item-${idx}-taxCategory`}
+                      label="消費税の区分"
+                      error={errors.items?.[idx]?.taxCategory?.message}
+                    >
+                      <select
+                        id={`item-${idx}-taxCategory`}
+                        className={inputClass}
+                        value={values.items[idx]?.taxCategory ?? ""}
+                        onChange={(e) =>
+                          form.setValue(
+                            `items.${idx}.taxCategory`,
+                            (e.target.value ||
+                              null) as InvoiceUpsertInput["items"][number]["taxCategory"],
+                            { shouldDirty: true, shouldValidate: true },
+                          )
+                        }
+                      >
+                        <option value="">
+                          請求書の税率（{props.defaultTaxRateBps / 100}%）
+                        </option>
+                        {TAX_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {taxCategoryInfo[c].label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
                   <div className="mt-2 text-right text-[11px]">
                     {values.items[idx]?.amountManuallyEdited ? (
                       <button
@@ -825,10 +859,31 @@ export function InvoiceForm(props: {
                 <dt>税抜合計</dt>
                 <dd className="tabular-nums">{yen(summary.subtotal)} 円</dd>
               </div>
-              <div className="flex justify-between text-slate-500">
-                <dt>消費税（{props.defaultTaxRateBps / 100}%）</dt>
-                <dd className="tabular-nums">{yen(summary.taxAmount)} 円</dd>
-              </div>
+              {hasTaxCategories(normalizedItems) ? (
+                summary.taxGroups.map((g) => (
+                  <div key={g.key} className="text-slate-500">
+                    <div className="flex justify-between">
+                      <dt>
+                        {g.label}対象 {yen(g.subtotal)} 円
+                      </dt>
+                      <dd className="tabular-nums">
+                        消費税 {yen(g.taxAmount)} 円
+                      </dd>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between text-slate-500">
+                  <dt>消費税（{props.defaultTaxRateBps / 100}%）</dt>
+                  <dd className="tabular-nums">{yen(summary.taxAmount)} 円</dd>
+                </div>
+              )}
+              {hasTaxCategories(normalizedItems) && (
+                <div className="flex justify-between text-slate-500">
+                  <dt>消費税合計</dt>
+                  <dd className="tabular-nums">{yen(summary.taxAmount)} 円</dd>
+                </div>
+              )}
               {values.withholdingEnabled && (
                 <div className="flex justify-between text-slate-500">
                   <dt>源泉所得税</dt>

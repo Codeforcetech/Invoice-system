@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { InvoiceUpsertInput } from "@/lib/validators/invoice";
 import { InvoiceReceipt } from "@/components/invoices/invoice-receipt";
 import { InvoiceDetailToolbar } from "@/app/(app)/invoices/_components/invoice-detail-toolbar";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
@@ -96,6 +97,7 @@ export default async function EditInvoicePage(props: {
               unitPrice: it.unitPrice,
               amount: it.amount,
               amountManuallyEdited: it.amountManuallyEdited,
+              taxCategory: it.taxCategory as InvoiceUpsertInput["items"][number]["taxCategory"],
               note: it.note ?? "",
             })),
           }}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TAX_CATEGORIES } from "@/lib/tax/categories";
 
 export const invoiceItemInputSchema = z.object({
   productName: z
@@ -29,6 +30,10 @@ export const invoiceItemInputSchema = z.object({
     .nonnegative("金額は0以上で入力してください")
     .max(1_000_000_000, "金額は10億円以下で入力してください"),
   amountManuallyEdited: z.coerce.boolean(),
+  /** 消費税区分。未設定（null）は請求書の税率を引き継ぐ（従来の動作） */
+  taxCategory: z
+    .preprocess((v) => (v === "" ? null : v), z.enum(TAX_CATEGORIES).nullable())
+    .optional(),
   note: z
     .string()
     .max(1000, "明細備考は1,000文字以内で入力してください")

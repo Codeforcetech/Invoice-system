@@ -214,11 +214,13 @@ async function createDraft(
 ) {
   if (!(await tx.company.findFirst({ where: { id: input.companyId, userId } })))
     throw new Error("取引先が見つかりません。");
-  const calc = calculateInvoice({
+  // `taxGroups` is for display only; it is not a column.
+  const { taxGroups: _taxGroups, ...calc } = calculateInvoice({
     items: input.items,
     taxRateBps: taxRate,
     withholdingEnabled: input.withholdingEnabled,
   });
+  void _taxGroups;
   const invoiceNumber = await generateInvoiceNumber({
     prisma: tx,
     currentUserId: userId,
@@ -250,6 +252,7 @@ async function createDraft(
             ? i.amount
             : Math.floor(i.quantity * i.unitPrice),
           amountManuallyEdited: i.amountManuallyEdited,
+          taxCategory: i.taxCategory ?? null,
           note: i.note,
         })),
       },
@@ -400,6 +403,7 @@ export async function createRecurringInvoice(raw: unknown) {
         unitPrice: i.unitPrice,
         amount: i.amount,
         amountManuallyEdited: i.amountManuallyEdited,
+        taxCategory: i.taxCategory,
         note: i.note,
       })),
     };

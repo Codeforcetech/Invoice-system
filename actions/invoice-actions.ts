@@ -53,6 +53,7 @@ function buildNormalizedItems(input: InvoiceUpsertInput) {
       unitPrice: it.unitPrice,
       amount: toYenInt(amount),
       amountManuallyEdited: it.amountManuallyEdited,
+      taxCategory: it.taxCategory ?? null,
       note: it.note ?? null,
     };
   });
@@ -69,6 +70,7 @@ function buildCalc(
       unitPrice: it.unitPrice,
       amount: it.amount,
       amountManuallyEdited: it.amountManuallyEdited,
+      taxCategory: it.taxCategory,
     })),
     taxRateBps,
     withholdingEnabled,
@@ -190,6 +192,7 @@ export async function getInvoice(params: { invoiceId: string }) {
           unitPrice: true,
           amount: true,
           amountManuallyEdited: true,
+          taxCategory: true,
           note: true,
         },
       },
@@ -454,6 +457,7 @@ export async function duplicateInvoice(params: {
         unitPrice: it.unitPrice,
         amount: it.amount,
         amountManuallyEdited: it.amountManuallyEdited,
+        taxCategory: it.taxCategory,
         note: it.note,
       }));
 
@@ -463,6 +467,7 @@ export async function duplicateInvoice(params: {
           unitPrice: it.unitPrice,
           amount: it.amount,
           amountManuallyEdited: it.amountManuallyEdited,
+          taxCategory: it.taxCategory,
         })),
         taxRateBps,
         withholdingEnabled: src.withholdingEnabled,

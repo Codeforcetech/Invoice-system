@@ -1,3 +1,8 @@
+import {
+  hasReducedRate,
+  invoiceTaxGroups,
+  itemTaxMark,
+} from "@/lib/invoice/taxBreakdown";
 import Link from "next/link";
 
 import type { InvoiceWithItems } from "@/actions/invoice-actions";
@@ -55,7 +60,11 @@ export type InvoiceDocument = Pick<
     Pick<
       InvoiceWithItems["items"][number],
       "id" | "productName" | "unit" | "unitPrice" | "amount" | "note"
-    > & { quantity: number | InvoiceWithItems["items"][number]["quantity"] }
+    > & {
+      quantity: number | InvoiceWithItems["items"][number]["quantity"];
+      /** 消費税区分。未設定は請求書の税率を引き継ぐ */
+      taxCategory?: string | null;
+    }
   >;
 };
 
@@ -119,7 +128,7 @@ export function InvoicePrintView(props: {
   publicShare?: boolean;
 }) {
   const { invoice, settings, embed, publicShare } = props;
-  const taxRatePercent = invoice.taxRate / 100;
+  const taxGroups = invoiceTaxGroups(invoice);
   const showWithholding =
     invoice.withholdingEnabled && invoice.withholdingTax > 0;
   const remarks = [invoice.company.paymentTerms, settings.transferNote]
@@ -276,7 +285,22 @@ export function InvoicePrintView(props: {
                   className={`border-b border-zinc-300 ${idx % 2 === 1 ? "bg-zinc-50" : "bg-white"}`}
                 >
                   <td className="py-2.5 pr-4 align-top">
-                    <div>{itemLabel(it)}</div>
+                    <div>
+                      {itemLabel(it)}
+                      {(() => {
+                        const mark = itemTaxMark(it, invoice);
+                        return (
+                          <>
+                            {mark.reduced ? " ※" : ""}
+                            {mark.note ? (
+                              <span className="ml-1 text-[11px] text-zinc-500">
+                                （{mark.note}）
+                              </span>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                    </div>
                     {it.note ? (
                       <div className="mt-0.5 text-[12px] text-zinc-500">
                         {it.note}
@@ -303,7 +327,7 @@ export function InvoicePrintView(props: {
               <p className="mb-2 text-[13px] font-semibold text-zinc-800">
                 税率別内訳
               </p>
-              <table className="w-full max-w-[340px] border-collapse text-[12px]">
+              <table className="w-full max-w-[360px] border-collapse text-[12px]">
                 <thead>
                   <tr className="border-b border-zinc-400 text-zinc-700">
                     <th className="w-10 py-1.5 pr-2 text-left font-medium" />
@@ -319,22 +343,29 @@ export function InvoicePrintView(props: {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-zinc-300">
-                    <td className="py-1.5 pr-2 tabular-nums">
-                      {taxRatePercent}%
-                    </td>
-                    <td className="border-l border-zinc-300 py-1.5 px-2 text-right tabular-nums">
-                      {yen(invoice.subtotal)}
-                    </td>
-                    <td className="py-1.5 px-2 text-right tabular-nums">
-                      {yen(invoice.taxAmount)}
-                    </td>
-                    <td className="py-1.5 pl-2 text-right tabular-nums">
-                      {yen(invoice.totalWithTax)}
-                    </td>
-                  </tr>
+                  {taxGroups.map((g) => (
+                    <tr key={g.key} className="border-b border-zinc-300">
+                      <td className="whitespace-nowrap py-1.5 pr-2 tabular-nums">
+                        {g.label}
+                      </td>
+                      <td className="border-l border-zinc-300 py-1.5 px-2 text-right tabular-nums">
+                        {yen(g.subtotal)}
+                      </td>
+                      <td className="py-1.5 px-2 text-right tabular-nums">
+                        {yen(g.taxAmount)}
+                      </td>
+                      <td className="py-1.5 pl-2 text-right tabular-nums">
+                        {yen(g.total)}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
+              {hasReducedRate(taxGroups) ? (
+                <p className="mt-1.5 text-[11px] text-zinc-500">
+                  ※は軽減税率（8%）対象です。
+                </p>
+              ) : null}
             </div>
 
             <div className="w-[42%] min-w-[200px] shrink-0 text-[13px]">

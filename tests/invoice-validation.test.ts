@@ -40,7 +40,8 @@ it("respects manual overrides and withholding", () => {
     taxRateBps: 1000,
     withholdingEnabled: true,
   });
-  expect(result).toEqual({
+  // `taxGroups` (the per-rate breakdown) is checked in invoice-tax.test.ts.
+  expect({ ...result, taxGroups: undefined }).toEqual({
     subtotal: 15000,
     taxAmount: 1500,
     totalWithTax: 16500,

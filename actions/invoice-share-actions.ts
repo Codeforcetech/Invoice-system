@@ -36,6 +36,7 @@ const invoiceShareSelect = {
       unitPrice: true,
       amount: true,
       amountManuallyEdited: true,
+      taxCategory: true,
       note: true,
     },
   },

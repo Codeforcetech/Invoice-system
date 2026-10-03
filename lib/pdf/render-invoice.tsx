@@ -15,6 +15,12 @@ import type {
   InvoicePrintSettings,
 } from "@/app/(app)/invoices/_components/invoice-print-view";
 import { loadPdfStamp } from "./stamp";
+import { hasTaxCategories } from "@/lib/invoice/calculateInvoice";
+import {
+  hasReducedRate,
+  invoiceTaxGroups,
+  itemTaxMark,
+} from "@/lib/invoice/taxBreakdown";
 
 Font.register({
   family: "NotoSansJP",
@@ -23,7 +29,8 @@ Font.register({
 Font.registerHyphenationCallback((word) => {
   const segments: string[] = [];
   for (const char of Array.from(word)) {
-    if (/^[、。，．！？!?）)」』】]$/.test(char) && segments.length) segments[segments.length - 1] += char;
+    if (/^[、。，．！？!?）)」』】]$/.test(char) && segments.length)
+      segments[segments.length - 1] += char;
     else segments.push(char);
   }
   return segments;
@@ -83,7 +90,6 @@ const style = StyleSheet.create({
     borderColor: "#cbd5e1",
   },
   box: { borderWidth: 0.5, borderColor: "#cbd5e1", padding: 10, marginTop: 5 },
-
 });
 const yen = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 const date = (d: Date) =>
@@ -103,9 +109,18 @@ export async function renderInvoicePdf(
   const remarks = [invoice.company.paymentTerms, settings.transferNote]
     .filter(Boolean)
     .join("\n\n");
+  const taxGroups = invoiceTaxGroups(invoice);
+  // Invoices without tax categories keep the original wording exactly.
+  const categorized = hasTaxCategories(invoice.items);
+  const singleRate =
+    !categorized || (taxGroups.length === 1 && taxGroups[0].taxable);
+  const shownRate = categorized ? taxGroups[0].rateBps : invoice.taxRate;
   const totals = [
     ["税抜合計", invoice.subtotal],
-    [`消費税（${invoice.taxRate / 100}%）`, invoice.taxAmount],
+    [
+      singleRate ? `消費税（${shownRate / 100}%）` : "消費税合計",
+      invoice.taxAmount,
+    ],
     ...(invoice.withholdingEnabled
       ? [["源泉所得税", -invoice.withholdingTax]]
       : []),
@@ -185,6 +200,10 @@ export async function renderInvoicePdf(
               <Text>
                 {item.productName}
                 {item.unit ? `（${item.unit}）` : ""}
+                {itemTaxMark(item, invoice).reduced ? " ※" : ""}
+                {itemTaxMark(item, invoice).note
+                  ? `（${itemTaxMark(item, invoice).note}）`
+                  : ""}
               </Text>
               {item.note && <Text style={style.note}>{item.note}</Text>}
             </View>
@@ -202,11 +221,32 @@ export async function renderInvoicePdf(
           ))}
         </View>
         <View style={{ marginTop: 24 }} wrap={false}>
-          <Text>税率別内訳（{invoice.taxRate / 100}%）</Text>
-          <Text style={style.note}>
-            税抜 {yen(invoice.subtotal)} 円　／　消費税 {yen(invoice.taxAmount)}{" "}
-            円　／　税込 {yen(invoice.totalWithTax)} 円
-          </Text>
+          {taxGroups.length === 1 ? (
+            <>
+              <Text>
+                税率別内訳（
+                {singleRate ? `${shownRate / 100}%` : taxGroups[0].label}）
+              </Text>
+              <Text style={style.note}>
+                税抜 {yen(taxGroups[0].subtotal)} 円　／　消費税{" "}
+                {yen(taxGroups[0].taxAmount)} 円　／　税込{" "}
+                {yen(taxGroups[0].total)} 円
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text>税率別内訳</Text>
+              {taxGroups.map((g) => (
+                <Text key={g.key} style={style.note}>
+                  {g.label}対象　税抜 {yen(g.subtotal)} 円　／　消費税{" "}
+                  {yen(g.taxAmount)} 円　／　税込 {yen(g.total)} 円
+                </Text>
+              ))}
+            </>
+          )}
+          {hasReducedRate(taxGroups) && (
+            <Text style={style.note}>※は軽減税率（8%）対象です。</Text>
+          )}
         </View>
         <View style={{ marginTop: 20 }} wrap={false}>
           <Text>振込先</Text>
