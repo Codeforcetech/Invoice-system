@@ -89,10 +89,12 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")("operation log cove
   });
 
   it("writes nothing for an unknown address and still refuses", async () => {
-    const before = await prisma.auditLog.count();
+    // Count only this test's own users: other test files write audit rows in parallel.
+    const count = () => prisma.auditLog.count({ where: { OR: [{ ownerId: { in: users } }, { actorId: { in: users } }] } });
+    const before = await count();
     const res = await login(form("nobody-here@example.test", "x"));
     expect(res.headers.get("Location")).toContain("error=invalid");
-    expect(await prisma.auditLog.count()).toBe(before);
+    expect(await count()).toBe(before);
   });
 
   it("does not log a sign-in that was refused for a wrong password as a success", async () => {

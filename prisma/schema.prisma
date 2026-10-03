@@ -203,6 +203,8 @@ model InvoiceItem {
   unitPrice            Int
   amount               Int
   amountManuallyEdited Boolean  @default(false)
+  /// 消費税区分。null は請求書の税率を引き継ぐ（従来動作）
+  taxCategory          String?
   note                 String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

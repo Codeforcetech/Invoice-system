@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Resolver } from "react-hook-form";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import {
-  settingsUpdateSchema,
+  createSettingsSchema,
   type SettingsUpdateInput,
 } from "@/lib/validators/settings";
+import {
+  REGISTRATION_NUMBER_HINT,
+  normalizeRegistrationNumber,
+} from "@/lib/tax/registration-number";
 import { updateSettings } from "@/actions/settings-actions";
 import { inputClass, labelClass, textareaClass } from "@/lib/ui/form-classes";
 import { isEmbeddedStamp } from "@/lib/invoice/resolveStampImageUrl";
@@ -23,10 +27,12 @@ export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
+  const schema = useMemo(
+    () => createSettingsSchema(props.initialValues.invoiceRegistrationNumber),
+    [props.initialValues.invoiceRegistrationNumber],
+  );
   const form = useForm<SettingsUpdateInput>({
-    resolver: zodResolver(
-      settingsUpdateSchema,
-    ) as Resolver<SettingsUpdateInput>,
+    resolver: zodResolver(schema) as Resolver<SettingsUpdateInput>,
     defaultValues: props.initialValues,
     mode: "onChange",
   });
@@ -103,8 +109,28 @@ export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
             <input
               id="field-invoiceRegistrationNumber"
               className={`mt-1.5 ${inputClass}`}
+              placeholder="T1234567890123"
+              aria-describedby="hint-invoiceRegistrationNumber"
               {...form.register("invoiceRegistrationNumber")}
             />
+            {form.formState.errors.invoiceRegistrationNumber ? (
+              <p className="mt-1 text-sm text-red-600">
+                {form.formState.errors.invoiceRegistrationNumber.message}
+              </p>
+            ) : !normalizeRegistrationNumber(
+                props.initialValues.invoiceRegistrationNumber,
+              ).ok ? (
+              <p className="mt-1 text-sm text-amber-700">
+                保存済みの登録番号が「T＋13桁」の形式ではありません。請求書に正しい番号を印字するため、確認してください。
+              </p>
+            ) : null}
+            <p
+              id="hint-invoiceRegistrationNumber"
+              className="mt-1 text-xs text-slate-500"
+            >
+              {REGISTRATION_NUMBER_HINT}
+              登録の有無は国税庁の公表サイトで確認してください。
+            </p>
           </div>
           <div>
             <label htmlFor="field-contactPerson" className={labelClass}>

@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireWorkspace } from "@/lib/auth/require-workspace";
 import { recordAudit } from "@/lib/workspace/audit";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
-import { settingsUpdateSchema, type SettingsUpdateInput } from "@/lib/validators/settings";
+import { createSettingsSchema, type SettingsUpdateInput } from "@/lib/validators/settings";
 
 export async function getSettings() {
   const ws = await requireWorkspace("VIEWER");
@@ -17,7 +17,11 @@ export async function getSettings() {
 
 export async function updateSettings(raw: unknown) {
   const ws = await requireWorkspace("ADMIN");
-  const input = settingsUpdateSchema.parse(raw) satisfies SettingsUpdateInput;
+  const current = await prisma.systemSetting.findUnique({
+    where: { userId: ws.ownerId },
+    select: { invoiceRegistrationNumber: true },
+  });
+  const input = createSettingsSchema(current?.invoiceRegistrationNumber).parse(raw) satisfies SettingsUpdateInput;
 
   if (input.stampImageUrl && isEmbeddedStamp(input.stampImageUrl)) await loadPdfStamp(input.stampImageUrl);
 
