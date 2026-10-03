@@ -44,7 +44,7 @@ export default function GuidePage() {
         className="rounded-2xl bg-brand-navy p-6 text-white sm:p-8"
         aria-labelledby="guide-start"
       >
-        <p className="text-xs font-medium tracking-widest text-emerald-200">
+        <p className="text-xs font-medium tracking-widest text-brand-gold">
           はじめての方へ
         </p>
         <h2 id="guide-start" className="mt-3 text-xl font-semibold sm:text-2xl">
@@ -55,7 +55,7 @@ export default function GuidePage() {
         </p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl bg-white/10 p-4">
-            <p className="text-sm font-semibold text-emerald-200">
+            <p className="text-sm font-semibold text-brand-gold">
               請求書だけ使う（約15分）
             </p>
             <p className="mt-2 text-xs leading-6 text-slate-200">
@@ -63,7 +63,7 @@ export default function GuidePage() {
             </p>
           </div>
           <div className="rounded-xl bg-white/10 p-4">
-            <p className="text-sm font-semibold text-emerald-200">
+            <p className="text-sm font-semibold text-brand-gold">
               会計まで使う
             </p>
             <p className="mt-2 text-xs leading-6 text-slate-200">
@@ -75,14 +75,14 @@ export default function GuidePage() {
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href="#first-steps"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-300 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-200"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-gold px-5 py-3 text-sm font-semibold text-brand-navy shadow-sm hover:bg-brand-gold-hover"
           >
             最初の設定を見る
             <AppIcon name="arrow" />
           </Link>
           <Link
             href="#finder"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/30 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10"
           >
             やりたいことから探す
           </Link>
@@ -94,7 +94,7 @@ export default function GuidePage() {
           <Link
             key={id}
             href={`#${id}`}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:border-sky-400 hover:bg-sky-50"
           >
             {label}
           </Link>
@@ -118,7 +118,7 @@ export default function GuidePage() {
           {overview.map((group) => (
             <div key={group.title} className={card}>
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#edf6f2] text-emerald-800">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
                   <AppIcon name={group.icon} />
                 </span>
                 <div>
@@ -131,7 +131,7 @@ export default function GuidePage() {
                   <li key={f.title}>
                     <Link
                       href={f.href}
-                      className="block rounded-xl border border-slate-100 p-3 hover:border-emerald-300 hover:bg-emerald-50/50"
+                      className="block rounded-xl border border-slate-100 p-3 hover:border-sky-300 hover:bg-sky-50/50"
                     >
                       <span className="text-sm font-semibold text-slate-800">
                         {f.title}
@@ -175,7 +175,7 @@ export default function GuidePage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold">{c.title}</h3>
                   <span
-                    className={`${pill} ${c.need === "必須" ? "bg-emerald-100 text-emerald-900" : ""}`}
+                    className={`${pill} ${c.need === "必須" ? "bg-brand-gold/25 text-brand-navy" : ""}`}
                   >
                     {c.need}
                   </span>
@@ -186,7 +186,7 @@ export default function GuidePage() {
                 </p>
                 <Link
                   href={c.href}
-                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-emerald-800 underline underline-offset-4"
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-sky-700 underline underline-offset-4"
                 >
                   開く
                   <AppIcon name="arrow" className="h-4 w-4" />
@@ -226,7 +226,7 @@ export default function GuidePage() {
                   <td className="whitespace-nowrap p-3 font-medium">
                     <Link
                       href={m.href}
-                      className="text-emerald-800 underline underline-offset-4"
+                      className="text-sky-700 underline underline-offset-4"
                     >
                       {m.name}
                     </Link>
@@ -261,7 +261,7 @@ export default function GuidePage() {
               <div className="text-sm">
                 <Link
                   href={f.href}
-                  className="font-medium text-emerald-800 underline underline-offset-4"
+                  className="font-medium text-sky-700 underline underline-offset-4"
                 >
                   {f.where}
                 </Link>
@@ -295,9 +295,9 @@ export default function GuidePage() {
             <Link
               key={c.id}
               href={`#${c.id}`}
-              className="group flex min-h-20 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-400 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-700"
+              className="group flex min-h-20 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 hover:border-sky-400 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-brand-blue"
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#edf6f2] text-emerald-800">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
                 <AppIcon name={c.icon} />
               </span>
               <span className="min-w-0">
@@ -334,7 +334,7 @@ export default function GuidePage() {
               <p className="mt-2">
                 <span className={pill}>権限：{c.role}</span>
               </p>
-              <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-7 marker:font-semibold marker:text-emerald-800">
+              <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-7 marker:font-semibold marker:text-sky-700">
                 {c.steps.map((step) => (
                   <li key={step} className="pl-1">
                     {step}
@@ -347,7 +347,7 @@ export default function GuidePage() {
               <div className="mt-5 flex flex-wrap items-center gap-4">
                 <Link
                   href={c.href}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-4 py-2.5 text-sm font-semibold text-brand-navy shadow-sm hover:bg-brand-blue/20"
                 >
                   {c.action}
                   <AppIcon name="arrow" className="h-4 w-4" />
@@ -355,7 +355,7 @@ export default function GuidePage() {
                 {c.id === "templates" && (
                   <Link
                     href="/mail-templates"
-                    className="py-3 text-sm text-emerald-800 underline underline-offset-4"
+                    className="py-3 text-sm text-sky-700 underline underline-offset-4"
                   >
                     メールテンプレートを開く
                   </Link>
@@ -441,7 +441,7 @@ export default function GuidePage() {
         <div className="mt-5 divide-y divide-slate-100">
           {questions.map(({ q, a }) => (
             <details key={q} className="group py-1">
-              <summary className="cursor-pointer rounded-lg py-4 text-sm font-medium text-slate-800 focus-visible:outline-2 focus-visible:outline-emerald-700">
+              <summary className="cursor-pointer rounded-lg py-4 text-sm font-medium text-slate-800 focus-visible:outline-2 focus-visible:outline-brand-blue">
                 {q}
               </summary>
               <p className="pb-5 pl-4 text-sm leading-7 text-slate-600">{a}</p>
@@ -451,7 +451,7 @@ export default function GuidePage() {
       </section>
       <Link
         href="#main-content"
-        className="self-center px-4 py-3 text-sm text-emerald-800"
+        className="self-center px-4 py-3 text-sm text-sky-700"
       >
         ページの先頭へ ↑
       </Link>
