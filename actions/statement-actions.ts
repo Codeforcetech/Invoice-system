@@ -204,6 +204,68 @@ const rowSchema = z.object({
   id: z.string().min(1),
   version: z.string().datetime(),
 });
+/**
+ * 明細と「同じ日・同じ口座・同じ金額」で、まだ明細と結びついていない記録を探す。
+ * 照合の条件は decideStatement と同じ。利用者が仕訳IDを調べなくても選べるようにする。
+ */
+export async function findLinkCandidates(raw: unknown) {
+  try {
+    const ws = await requireWorkspace("EDITOR");
+    const { id } = z.object({ id: z.string().min(1) }).parse(raw);
+    const row = await prisma.statementRow.findFirst({
+      where: { id, userId: ws.ownerId, status: "PENDING" },
+    });
+    if (!row) return { ok: false as const, error: "明細が見つかりません。" };
+    const { feed } = await ownedFeed(prisma, ws.ownerId, row.feedId);
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        userId: ws.ownerId,
+        date: row.date,
+        reversalOf: null,
+        source: { not: "STATEMENT" },
+        lines: { some: { accountId: feed.accountId } },
+      },
+      include: { lines: true },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+    });
+    const ids = entries.map((e) => e.id);
+    const [cancelled, taken] = await Promise.all([
+      prisma.journalEntry.findMany({
+        where: { userId: ws.ownerId, reversalOf: { in: ids } },
+        select: { reversalOf: true },
+      }),
+      prisma.statementRow.findMany({
+        where: {
+          userId: ws.ownerId,
+          feedId: feed.id,
+          entryId: { in: ids },
+          status: { in: ["POSTED", "LINKED"] },
+        },
+        select: { entryId: true },
+      }),
+    ]);
+    const skip = new Set([
+      ...cancelled.map((c) => c.reversalOf),
+      ...taken.map((t) => t.entryId),
+    ]);
+    const candidates = entries
+      .filter(
+        (e) =>
+          !skip.has(e.id) &&
+          e.lines
+            .filter((l) => l.accountId === feed.accountId)
+            .reduce((n, l) => n + l.debit - l.credit, 0) === row.amount,
+      )
+      .map((e) => ({ id: e.id, memo: e.memo, date: dateText(e.date) }));
+    return { ok: true as const, candidates };
+  } catch (e) {
+    if (e instanceof PermissionError)
+      return { ok: false as const, error: e.message };
+    return { ok: false as const, error: "候補を探せませんでした。" };
+  }
+}
+
 export async function decideStatement(raw: unknown) {
   return execute("EDITOR", async (tx, userId, ws) => {
     const v = rowSchema

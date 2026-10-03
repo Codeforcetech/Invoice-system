@@ -11,6 +11,7 @@ import {
   previewStatements,
   importStatements,
   decideStatement,
+  findLinkCandidates,
   updateStatementRule,
 } from "@/actions/statement-actions";
 type Suggestion = {
@@ -673,6 +674,9 @@ function StatementItem({
   const [account, setAccount] = useState(r.suggestion?.accountId ?? "");
   const [mode, setMode] = useState("approve");
   const [entry, setEntry] = useState("");
+  const [candidates, setCandidates] = useState<
+    { id: string; memo: string; date: string }[] | null
+  >(null);
   const [learn, setLearn] = useState(true);
   return (
     <Card>
@@ -692,37 +696,47 @@ function StatementItem({
         {r.status === "PENDING" ? (
           <div className="mt-4 space-y-3">
             <label className="block max-w-sm text-sm">
-              処理方法
+              この明細をどうしますか？
               <select
                 className={`mt-1 ${selectClass}`}
                 value={mode}
-                onChange={(e) => setMode(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setMode(next);
+                  setEntry("");
+                  if (next === "link" && candidates === null)
+                    void findLinkCandidates({ id: r.id }).then((res) =>
+                      setCandidates(res.ok ? res.candidates : []),
+                    );
+                }}
               >
-                <option value="approve">新しく仕訳を登録</option>
-                <option value="link">既存仕訳と照合（二重計上しない）</option>
-                <option value="ignore">対象外にする</option>
+                <option value="approve">新しく記録する</option>
+                <option value="link">
+                  もう記録してある分と同じ（二重にならないよう結びつける）
+                </option>
+                <option value="ignore">記録しない（会社のお金ではない）</option>
               </select>
             </label>
             {mode === "approve" && (
               <>
                 <label className="block max-w-sm text-sm">
-                  相手科目
+                  何のお金ですか？
                   <select
                     className={`mt-1 ${selectClass}`}
                     value={account}
                     onChange={(e) => setAccount(e.target.value)}
                   >
-                    <option value="">選択してください</option>
+                    <option value="">選んでください</option>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.code} {a.name}
+                        {a.name}
                       </option>
                     ))}
                   </select>
                 </label>
                 {r.suggestion && (
                   <p className="text-xs text-sky-700">
-                    提案：{r.suggestion.name} ／ {r.suggestion.reason}
+                    おすすめ：{r.suggestion.name}（{r.suggestion.reason}）
                   </p>
                 )}
                 <label className="flex items-center gap-2 text-sm">
@@ -731,23 +745,40 @@ function StatementItem({
                     checked={learn}
                     onChange={(e) => setLearn(e.target.checked)}
                   />
-                  このパターンを学習し、次回から提案する
+                  次から、同じような明細は自動でおすすめする
                 </label>
               </>
             )}
             {mode === "link" && (
-              <label className="block text-sm">
-                既存の仕訳ID
-                <input
-                  value={entry}
-                  onChange={(e) => setEntry(e.target.value)}
-                  className={`mt-1 ${inputClass}`}
-                  placeholder="仕訳帳の各伝票に表示されるID"
-                />
-                <span className="mt-1 block text-xs text-slate-500">
-                  同日・同じ口座科目・同額の仕訳と照合します。仕訳は新しく作りません。
-                </span>
-              </label>
+              <fieldset className="text-sm">
+                <legend className="font-medium">同じ日・同じ金額の記録</legend>
+                {candidates === null ? (
+                  <p className="mt-1 text-xs text-slate-500">探しています…</p>
+                ) : candidates.length ? (
+                  <div className="mt-2 space-y-2">
+                    {candidates.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <input
+                          type="radio"
+                          name={`link-${r.id}`}
+                          checked={entry === c.id}
+                          onChange={() => setEntry(c.id)}
+                        />
+                        <span>
+                          {c.date}　{c.memo}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    同じ日・同じ金額の記録は見つかりませんでした。「新しく記録する」を選んでください。
+                  </p>
+                )}
+              </fieldset>
             )}
             <AppButton
               disabled={
@@ -769,19 +800,19 @@ function StatementItem({
                   () =>
                     setMessage(
                       mode === "approve"
-                        ? "仕訳を登録しました。"
+                        ? "記録しました。"
                         : mode === "link"
-                          ? "既存仕訳と照合しました。"
+                          ? "もう記録してある分と結びつけました。"
                           : "明細を対象外にしました。",
                     ),
                 )
               }
             >
               {mode === "approve"
-                ? "確認して仕訳登録"
+                ? "この内容で記録する"
                 : mode === "link"
-                  ? "照合する"
-                  : "対象外にする"}
+                  ? "結びつける"
+                  : "記録しない"}
             </AppButton>
           </div>
         ) : (
@@ -789,14 +820,13 @@ function StatementItem({
             <p className="text-sm text-slate-500">
               {r.entryId && (
                 <AppButtonLink
-                  href={`/accounting?view=journal&from=${r.date}&to=${r.date}`}
+                  href={`/accounting?view=money&from=${r.date}&to=${r.date}`}
                   variant="ghost"
                 >
-                  当日の仕訳を確認
+                  当日の記録を見る
                 </AppButtonLink>
               )}
               {r.decision}
-              {r.entryId && ` ／ 仕訳ID: ${r.entryId}`}
             </p>
             {r.invalidLink && (
               <p role="alert" className="text-sm text-amber-800">

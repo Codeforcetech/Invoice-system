@@ -15,6 +15,7 @@ import {
   previewStatements,
   importStatements,
   decideStatement,
+  findLinkCandidates,
   updateStatementRule,
 } from "@/actions/statement-actions";
 import type { CsvMapping } from "@/lib/accounting/statement-csv";
@@ -334,6 +335,14 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
         before = await prisma.journalEntry.count({
           where: { userId: auth.id },
         });
+      // 仕訳IDを調べなくても、同じ日・同じ金額の記録が候補として出る。
+      const found = await findLinkCandidates({ id: row.id });
+      expect(found).toEqual({
+        ok: true,
+        candidates: [
+          { id: entry.id, memo: "既存銀行仕訳", date: "2026-09-02" },
+        ],
+      });
       ok(
         await decideStatement({
           id: row.id,

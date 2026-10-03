@@ -241,6 +241,23 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       ).toBe(1);
     });
 
+    it("treats the empty file a browser sends when none was chosen as 'no attachment'", async () => {
+      const r = await recordEasyTransaction(
+        form({
+          categoryAccountId: await idOf("560"),
+          moneyAccountId: await idOf("100"),
+          memo: "添付なし",
+          file: new File([], ""),
+        }),
+      );
+      expect(r).toMatchObject({ ok: true });
+      expect(
+        await prisma.evidenceFile.count({
+          where: { ownerId: owner, counterparty: "添付なし" },
+        }),
+      ).toBe(0);
+    });
+
     it("refuses a bad attachment before anything is recorded", async () => {
       const before = await prisma.journalEntry.count({
         where: { userId: owner },

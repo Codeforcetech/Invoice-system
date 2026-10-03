@@ -15,7 +15,7 @@ export function AccountingSetup() {
       <CardSection>
         <h2 className="text-lg font-semibold">会計をはじめる</h2>
         <p className="mt-2 text-sm text-slate-600">
-          業種に合う勘定科目を準備します。既存の請求書や支払いは変更しません。
+          お金の出入りを記録するための準備をします。2つ答えるだけで終わります。既存の請求書や支払いは変更しません。
         </p>
         <form
           className="mt-6 max-w-xl space-y-4"
@@ -26,6 +26,7 @@ export function AccountingSetup() {
             setError("");
             try {
               await initializeAccounting(Object.fromEntries(f));
+              router.push("/accounting/opening");
               router.refresh();
             } catch {
               setError(
@@ -37,7 +38,7 @@ export function AccountingSetup() {
           }}
         >
           <label className="block text-sm">
-            業種
+            どんな仕事ですか？
             <select name="industry" className={`mt-1 ${selectClass}`}>
               {Object.entries(templates).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -47,7 +48,7 @@ export function AccountingSetup() {
             </select>
           </label>
           <label className="block text-sm">
-            会計開始日
+            いつから記録をはじめますか？
             <input
               required
               name="startDate"
@@ -57,10 +58,10 @@ export function AccountingSetup() {
             />
           </label>
           <p className="text-xs leading-relaxed text-slate-500">
-            開始日は登録後に変更できません。開始残高はこの日付の振替伝票として入力します。金額は円・税込経理です。既存データは「請求・支払連携」から確認して取り込めます。
+            この日付は、あとから変更できません。たとえば「今年の1月1日」や「今日」にします。次の画面で、その日の現金や預金の残りを入力します。金額は円・税込みです。既存の請求書などは、あとで「請求・支払連携」から取り込めます。
           </p>
           <AppButton type="submit" disabled={busy}>
-            {busy ? "準備中…" : "勘定科目を準備して開始"}
+            {busy ? "準備中…" : "次へ（いまの状況を入力）"}
           </AppButton>
           {error && (
             <p role="alert" className="text-sm text-rose-700">

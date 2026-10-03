@@ -45,6 +45,8 @@ function failure(e: unknown): { ok: false; error: string } {
     error: "記録できませんでした。入力内容を確認して、もう一度お試しください。",
   };
 }
+/** ファイルを選んでいないときに送られる「空のファイル」は、添付なしとして扱う。 */
+const hasFile = (f: File) => f.size > 0;
 const refresh = () => {
   revalidatePath("/accounting", "layout");
   revalidatePath("/dashboard");
@@ -63,7 +65,7 @@ export async function recordEasyTransaction(
     const v = easySchema.parse(rest);
     // 内容の確認は、記録の前に済ませる（形式の合わないファイルで、記録だけ残らないようにする）。
     const attachment =
-      v.kind !== "MOVE" && file instanceof File && (file.size > 0 || file.name)
+      v.kind !== "MOVE" && file instanceof File && hasFile(file)
         ? await readEvidenceFile(file)
         : null;
 

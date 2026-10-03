@@ -6,6 +6,7 @@ import { hasRole } from "@/lib/workspace/access";
 import { accountingReport } from "@/lib/accounting/reports";
 import { dateText, yen } from "@/lib/accounting/model";
 import { japanToday } from "@/lib/expenses/model";
+import { hasOpeningBalance } from "@/lib/accounting/opening";
 import { AccountingSetup } from "@/components/accounting/setup";
 import { AccountManager } from "@/components/accounting/accounts";
 import { CancelEntry } from "@/components/accounting/cancel-entry";
@@ -30,11 +31,16 @@ export default async function AccountingPage({
     where: { userId: ws.ownerId },
     orderBy: { code: "asc" },
   });
-  const view = ["journal", "ledger", "transactions", "tax", "accounts"].includes(
-    str("view"),
-  )
+  const view = [
+    "money",
+    "journal",
+    "ledger",
+    "transactions",
+    "tax",
+    "accounts",
+  ].includes(str("view"))
     ? str("view")
-    : "journal";
+    : "money";
   const from =
       str("from") ||
       (setting
@@ -46,7 +52,12 @@ export default async function AccountingPage({
     error = "";
   if (setting && view !== "accounts")
     try {
-      report = await accountingReport(ws.ownerId, { view, from, to, accountId });
+      report = await accountingReport(ws.ownerId, {
+        view: view === "money" ? "journal" : view,
+        from,
+        to,
+        accountId,
+      });
     } catch (e) {
       error = e instanceof Error ? e.message : "帳簿を表示できませんでした。";
     }
@@ -60,17 +71,61 @@ export default async function AccountingPage({
       })
     : [];
   const reversed = new Set(reversals.map((e) => e.reversalOf));
-  const exportQuery = new URLSearchParams({ view, from, to, accountId });
+  const openingDone = setting
+    ? await hasOpeningBalance(prisma, ws.ownerId)
+    : true;
+  const feeds = setting
+    ? await prisma.statementFeed.findMany({
+        where: { userId: ws.ownerId },
+        select: { accountId: true },
+      })
+    : [];
+  const moneyIds = new Set([
+    ...accounts
+      .filter((a) => a.code === "100" || a.code === "110")
+      .map((a) => a.id),
+    ...feeds.map((f) => f.accountId),
+  ]);
+  /** 1件の記録を、「入金／出金／移動」と金額、相手の分類でやさしく言い表す。 */
+  const plain = (e: NonNullable<typeof report>["entries"][number]) => {
+    const inMoney = e.lines.filter((l) => moneyIds.has(l.accountId));
+    const net = inMoney.reduce((n, l) => n + l.debit - l.credit, 0);
+    const others = e.lines.filter((l) => !moneyIds.has(l.accountId));
+    const names = [...new Set(others.map((l) => l.account.name))].join("・");
+    if (!inMoney.length)
+      return {
+        kind: "その他",
+        tone: "text-slate-600",
+        amount: e.lines.reduce((n, l) => n + l.debit, 0),
+        names: e.lines.map((l) => l.account.name).join(" → "),
+      };
+    if (net > 0)
+      return { kind: "入金", tone: "text-emerald-700", amount: net, names };
+    if (net < 0)
+      return { kind: "出金", tone: "text-rose-700", amount: -net, names };
+    return {
+      kind: "移動",
+      tone: "text-sky-700",
+      amount: inMoney.reduce((n, l) => n + l.debit, 0),
+      names: "口座・現金の移動",
+    };
+  };
+  const exportQuery = new URLSearchParams({
+    view: view === "money" ? "journal" : view,
+    from,
+    to,
+    accountId,
+  });
   return (
     <PageShell>
       <SectionHeader
         variant="page"
-        title="会計・帳簿"
-        description="日々の取引を記録し、仕訳と科目別の残高を確認します。"
+        title="お金の出入り"
+        description="入ってきたお金・出ていったお金を記録して、あとから見返せます。"
         action={
           setting && hasRole(ws.role, "EDITOR") ? (
             <AppButtonLink href="/accounting/transactions/new">
-              ＋ 取引を入力
+              ＋ お金の出入りを記録
             </AppButtonLink>
           ) : undefined
         }
@@ -79,25 +134,33 @@ export default async function AccountingPage({
         <AccountingSetup />
       ) : (
         <>
+          {!openingDone && hasRole(ws.role, "ADMIN") && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">
+                最初に、いまの状況を入力しましょう。
+              </p>
+              <p className="mt-1">
+                現金・預金・借入などが、会計をはじめる日にいくらだったかを答えます（約2分）。
+              </p>
+              <div className="mt-3">
+                <AppButtonLink href="/accounting/opening">
+                  いまの状況を入力する
+                </AppButtonLink>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
-            <AppButtonLink href="/reports" variant="secondary">経営レポート</AppButtonLink>
-            {[
-              ["journal", "仕訳帳"],
-              ["ledger", "総勘定元帳"],
-              ["transactions", "取引データ"],
-              ["tax", "消費税区分別"],
-              ["accounts", "勘定科目"],
-            ].map(([key, name]) => (
-              <AppButtonLink
-                key={key}
-                href={`/accounting?view=${key}`}
-                variant={view === key ? "selected" : "secondary"}
-              >
-                {name}
-              </AppButtonLink>
-            ))}
+            <AppButtonLink
+              href="/accounting?view=money"
+              variant={view === "money" ? "selected" : "secondary"}
+            >
+              お金の出入り
+            </AppButtonLink>
+            <AppButtonLink href="/reports" variant="secondary">
+              経営レポート
+            </AppButtonLink>
             <AppButtonLink href="/accounting/statements" variant="secondary">
-              明細取込・自動仕訳
+              銀行・カード明細の取込
             </AppButtonLink>
             <AppButtonLink href="/accounting/linking" variant="secondary">
               請求・支払連携
@@ -109,9 +172,47 @@ export default async function AccountingPage({
               証憑ファイルボックス
             </AppButtonLink>
           </div>
+          <details
+            className="rounded-xl border border-slate-200 bg-white p-4 text-sm"
+            open={[
+              "journal",
+              "ledger",
+              "transactions",
+              "tax",
+              "accounts",
+            ].includes(view)}
+          >
+            <summary className="cursor-pointer font-medium text-slate-700">
+              経理の方向けの帳簿（仕訳帳・総勘定元帳など）
+            </summary>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                ["journal", "仕訳帳"],
+                ["ledger", "総勘定元帳"],
+                ["transactions", "取引データ"],
+                ["tax", "消費税区分別"],
+                ["accounts", "勘定科目"],
+              ].map(([key, name]) => (
+                <AppButtonLink
+                  key={key}
+                  href={`/accounting?view=${key}`}
+                  variant={view === key ? "selected" : "secondary"}
+                >
+                  {name}
+                </AppButtonLink>
+              ))}
+              {hasRole(ws.role, "EDITOR") && (
+                <AppButtonLink
+                  href="/accounting/transactions/advanced"
+                  variant="secondary"
+                >
+                  仕訳で入力
+                </AppButtonLink>
+              )}
+            </div>
+          </details>
           <p className="text-xs text-slate-500">
-            会計開始日 {dateText(setting.startDate)} ／ 円・税込経理 ／
-            開始残高は振替伝票で登録してください。
+            記録の開始日 {dateText(setting.startDate)} ／ 金額は円・税込みです。
           </p>
           {view === "accounts" ? (
             <AccountManager accounts={accounts} />
@@ -177,7 +278,7 @@ export default async function AccountingPage({
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-semibold">
-                      {report.title}{" "}
+                      {view === "money" ? "お金の出入り" : report.title}{" "}
                       {view !== "tax" && (
                         <span className="text-sm font-normal text-slate-500">
                           {report.entries.length}件
@@ -208,7 +309,60 @@ export default async function AccountingPage({
                       </span>
                     </div>
                   )}
-                  {view === "journal" ? (
+                  {view === "money" ? (
+                    <div className="space-y-3">
+                      {[...report.entries].reverse().map((e) => {
+                        const p = plain(e);
+                        const cancelled = reversed.has(e.id);
+                        return (
+                          <Card key={e.id}>
+                            <CardSection>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-slate-500">
+                                    {dateText(e.date)}
+                                    {e.source === "MANUAL"
+                                      ? ""
+                                      : e.source === "REVERSAL"
+                                        ? " ／ 取り消し"
+                                        : " ／ 自動で作成"}
+                                    {cancelled ? " ／ 取り消し済み" : ""}
+                                  </p>
+                                  <p className="mt-1 font-semibold">{e.memo}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {p.names}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p
+                                    className={`text-lg font-semibold tabular-nums ${cancelled ? "text-slate-400 line-through" : p.tone}`}
+                                  >
+                                    <span className="mr-2 text-xs font-medium">
+                                      {p.kind}
+                                    </span>
+                                    ¥{yen(p.amount)}
+                                  </p>
+                                  {e.source === "MANUAL" && !cancelled && (
+                                    <div className="mt-1">
+                                      <CancelEntry
+                                        id={e.id}
+                                        date={dateText(e.date)}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </CardSection>
+                          </Card>
+                        );
+                      })}
+                      {!report.entries.length && (
+                        <p className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">
+                          この期間の記録はありません。「お金の出入りを記録」から入力できます。
+                        </p>
+                      )}
+                    </div>
+                  ) : view === "journal" ? (
                     <div className="space-y-4">
                       {report.entries.map((e) => (
                         <Card key={e.id}>
@@ -255,7 +409,12 @@ export default async function AccountingPage({
                                         {l.account.code} {l.account.name}
                                         {isTaxCategory(l.taxCategory) && (
                                           <span className="ml-2 text-xs text-slate-500">
-                                            （{taxCategoryInfo[l.taxCategory].label}）
+                                            （
+                                            {
+                                              taxCategoryInfo[l.taxCategory]
+                                                .label
+                                            }
+                                            ）
                                           </span>
                                         )}
                                       </td>
