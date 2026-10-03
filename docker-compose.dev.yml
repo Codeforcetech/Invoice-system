@@ -1,0 +1,17 @@
+# Local PostgreSQL for development and tests only. Never use these credentials anywhere else.
+#   docker compose -f docker-compose.dev.yml up -d
+# Then create two databases (development data and test data are kept apart):
+#   docker compose -f docker-compose.dev.yml exec db psql -U postgres -c 'create database seiq_dev;'
+#   docker compose -f docker-compose.dev.yml exec db psql -U postgres -c 'create database seiq_test;'
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: dev-only-password
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - seiq-dev-data:/var/lib/postgresql/data
+volumes:
+  seiq-dev-data:

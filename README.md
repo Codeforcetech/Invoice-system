@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SEIQ（請求・売上・支払管理／会計）
 
-## Getting Started
+請求書の作成・送付から、入金・支払の記録、仕訳・帳簿、経費精算、固定資産、経営レポート、消費税の区分、証憑の保管までを扱う Web アプリ。Next.js（App Router）/ TypeScript / Prisma / PostgreSQL。
 
-First, run the development server:
+**引き継ぎ・開発に入る方は、まず [docs/HANDOFF.md](docs/HANDOFF.md) を読んでください**（現状、設計、動かし方、環境変数、本番反映の手順、確認してほしい点、既知の制限）。
+
+## すぐ動かす
 
 ```bash
+npm ci
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml exec db psql -U postgres -c 'create database seiq_dev;'
+docker compose -f docker-compose.dev.yml exec db psql -U postgres -c 'create database seiq_test;'
+cp .env.example .env        # DATABASE_URL と AUTH_SECRET を設定
+npx prisma migrate deploy
+npm run seed                # 開発用の見本アカウント（本番では実行できません）
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## よく使うコマンド
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| コマンド | 内容 |
+|---|---|
+| `npm run dev` | 開発サーバー |
+| `npm run build -- --webpack` | 本番ビルド（動作確認済みの方法） |
+| `npm run lint` / `npx tsc --noEmit` | 静的チェック |
+| `npx vitest run` | テスト。DBを使うテストは `RUN_ACCOUNTING_DB_TESTS=1 RUN_EXPENSE_DB_TESTS=1` と、テスト用の `DATABASE_URL` が必要（[HANDOFF.md §3](docs/HANDOFF.md)） |
+| `npx prisma migrate deploy` | マイグレーションの適用（本番も同じ） |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ドキュメント
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [docs/HANDOFF.md](docs/HANDOFF.md) — 引き継ぎ資料（最初に）
+- [docs/security-review.md](docs/security-review.md) — セキュリティの点検結果と残るリスク
+- [docs/accounting-phases.md](docs/accounting-phases.md) — 機能追加の経緯と検証の記録
+- [docs/phase8-plan.md](docs/phase8-plan.md) — 税・証憑の計画
+- アプリ内の「使い方ガイド」（`/guide`）— 利用者向けの説明

@@ -5,6 +5,7 @@ vi.mock("@/lib/auth/require-user", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { prisma } from "@/lib/db/prisma";
+import { purgeAudit } from "./audit-cleanup";
 import { recordInvoiceReceipt } from "@/actions/invoice-receipt-actions";
 import {
   listInvoices,
@@ -86,6 +87,7 @@ describe.skipIf(process.env.RUN_EXPENSE_DB_TESTS !== "1")(
           createdById: { in: ["receipt-test-owner-a", "receipt-test-owner-b"] },
         },
       });
+      await purgeAudit(["receipt-test-owner-a", "receipt-test-owner-b"]);
       await prisma.user.deleteMany({
         where: { id: { in: ["receipt-test-owner-a", "receipt-test-owner-b"] } },
       });
