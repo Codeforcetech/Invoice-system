@@ -18,6 +18,7 @@
 |---|---|---|
 | 会計の土台 | 勘定科目、振替伝票・帳簿形式入力、仕訳帳・総勘定元帳・取引データ、取消仕訳、CSV/PDF出力 | `lib/accounting/`、`actions/accounting-actions.ts`、`src/app/(app)/accounting/` |
 | かんたん入力（簿記なしで使える入口） | 「出ていったお金／入ってきたお金／口座の移動」の3択で記録。借方・貸方は自動生成。開始残高は5つの質問に答えるだけ（差額は元入金で自動調整、1回のみ）。会計トップは「お金の出入り」。経理向けの帳簿・仕訳入力は「経理の方向け」に残している | `lib/accounting/easy.ts`、`lib/accounting/opening.ts`、`actions/easy-accounting-actions.ts`、`src/components/accounting/{easy-entry-form,opening-form}.tsx`、`/accounting/opening`、`/accounting/transactions/{new,advanced}` |
+| 領収書の自動読み取り（経費精算） | 領収書の写真・PDFをドラッグ＆ドロップかフォルダ選択で添付すると、Claude Haiku 4.5で日付・金額・支払先・分類を読み取り、入力欄に入れる（確認して申請）。キー未設定なら手入力のまま。1人あたり1時間30回の簡易上限 | `lib/ocr/receipt.ts`、`actions/claim-actions.ts`（`readClaimReceiptAi`）、`src/components/claims/form.tsx` |
 | 請求・入金連携 | 請求書発行の自動仕訳、入金消込、支払の自動仕訳、定期請求、合算請求 | `lib/accounting/sync.ts`、`actions/accounting-link-actions.ts` |
 | 明細取込 | 銀行・カードCSV、重複判定、仕訳の提案と学習、自動登録ルール | `lib/accounting/statement-csv.ts`、`statements.ts`、`actions/statement-actions.ts` |
 | 経費精算 | 申請→承認→仕訳、レシート添付、通知（アプリ内・メール） | `actions/claim-actions.ts`、`lib/claims/`、`lib/notifications/` |
@@ -218,3 +219,12 @@ AI が書いたコードなので、特に次を見てほしい（金額・権�
 - リポジトリの外にある `work/accounting-dev/` の起動スクリプトやDBのダンプは、開発者個人のローカル環境用で、**引き継ぎには含まれない**（上の §3 の手順で同じ環境を作れる）。そこに書かれている開発用アカウントのパスワードも、リポジトリには含めていない。
 - ローカルの開発用DBには、画面確認で作った架空のデータ（請求書・証憑・メンバーなど）が入っている。証憑は削除できない設計のため残っている。
 - 未コミットのファイルは `.claude/launch.json`（AI アシスタントの画面確認用の設定）のみ。必要なければ不要。
+
+
+## 領収書の自動読み取り（本番に出す前の確認事項）
+
+- `ANTHROPIC_API_KEY`（サーバー側のみ）を設定したときだけ有効。未設定でも経費申請は手入力で使える。キーはリポジトリ・資料に書かない。
+- 領収書の画像・PDFは、読み取りのために Anthropic のAPIへ送信される。利用規約・個人情報の扱い（取引先名・金額が画像に含まれる）を会社として確認すること。
+- 料金は従量課金。Anthropic のコンソールで月の上限を設定すること。概算は1枚あたり1円未満（Haiku 4.5・画像1枚）。
+- 読み取り結果は下書き。必ず利用者が確認してから申請する（自動で申請・承認はしない）。
+- 回数制限（1人あたり1時間30回）はアプリ内の簡易制限で、サーバーを複数立てるとその台数分になる。厳密に制限するなら共有ストアが必要（`docs/security-review.md` の残るリスクにも追記）。

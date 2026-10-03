@@ -16,6 +16,7 @@ import { claimActions, claimSchema } from "@/lib/claims/model";
 import { recordAudit } from "@/lib/workspace/audit";
 import { readClaimReceipt } from "@/lib/claims/receipt";
 import { claimPermission } from "@/lib/claims/access";
+import { ocrConfigured, readReceiptWithAi } from "@/lib/ocr/receipt";
 import {
   notifyUsers,
   dispatchNotifications,
@@ -414,5 +415,49 @@ export async function processClaim(raw: unknown) {
     return { ok: true as const };
   } catch (e) {
     return failure(e);
+  }
+}
+
+/** 1人あたりの読み取り回数の上限（利用料の使いすぎを防ぐ）。同じサーバー内での簡易制限。 */
+const OCR_LIMIT = 30,
+  OCR_WINDOW_MS = 60 * 60 * 1000;
+const ocrUsage = new Map<string, number[]>();
+function ocrAllowed(userId: string, now = Date.now()) {
+  const recent = (ocrUsage.get(userId) ?? []).filter(
+    (t) => now - t < OCR_WINDOW_MS,
+  );
+  if (recent.length >= OCR_LIMIT) {
+    ocrUsage.set(userId, recent);
+    return false;
+  }
+  ocrUsage.set(userId, [...recent, now]);
+  return true;
+}
+
+/** 領収書の写真・PDFを読み取り、申請フォームに入れる下書きを返す（保存はしない）。 */
+export async function readClaimReceiptAi(form: FormData) {
+  const u = await requireUser();
+  try {
+    const ownerId = z.string().min(1).parse(form.get("ownerId"));
+    await claimPermission(prisma, ownerId, u.id);
+    if (!ocrConfigured())
+      return {
+        ok: false as const,
+        unconfigured: true,
+        error: "自動読み取りは、まだ設定されていません。手入力してください。",
+      };
+    const f = form.get("receipt");
+    const receipt = await readClaimReceipt(f instanceof File ? f : null);
+    if (!receipt) throw new Error("領収書の写真かPDFを選んでください。");
+    if (!ocrAllowed(u.id))
+      throw new Error(
+        "自動読み取りの回数が上限に達しました。しばらくしてからお試しください。",
+      );
+    const r = await readReceiptWithAi(receipt);
+    return r.ok
+      ? { ok: true as const, data: r.data }
+      : { ok: false as const, unconfigured: false, error: r.error };
+  } catch (e) {
+    return { ...failure(e), unconfigured: false };
   }
 }

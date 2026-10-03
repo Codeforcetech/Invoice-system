@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveClaim } from "@/actions/claim-actions";
+import { readClaimReceiptAi, saveClaim } from "@/actions/claim-actions";
 import { EXPENSE_CATEGORIES, japanToday } from "@/lib/expenses/model";
 import { Card, CardSection } from "@/components/ui/card";
 import { AppButton } from "@/components/ui/app-button";
@@ -30,6 +30,97 @@ export function ClaimForm({
     [id] = useState(() => data?.id ?? crypto.randomUUID()),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null),
+    fileRef = useRef<HTMLInputElement>(null),
+    [dragging, setDragging] = useState(false),
+    [fileName, setFileName] = useState(""),
+    [reading, setReading] = useState(false),
+    [readNote, setReadNote] = useState<{
+      tone: "ok" | "warn";
+      text: string;
+    } | null>(null);
+
+  const setField = (name: string, value: string) => {
+    const el = formRef.current?.elements.namedItem(name);
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) {
+      // 入力欄に値を入れ、画面の状態にも反映させる。
+      const proto =
+        el instanceof HTMLSelectElement
+          ? HTMLSelectElement.prototype
+          : el instanceof HTMLTextAreaElement
+            ? HTMLTextAreaElement.prototype
+            : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  };
+  const isEmpty = (name: string) => {
+    const el = formRef.current?.elements.namedItem(name);
+    return !(el as HTMLInputElement | null)?.value;
+  };
+
+  /** 選ばれた領収書を入力欄にセットし、読み取れた内容を各項目に入れる。 */
+  async function takeFile(file: File | undefined) {
+    if (!file || !fileRef.current) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    fileRef.current.files = transfer.files;
+    setFileName(file.name);
+    setReadNote(null);
+    setReading(true);
+    try {
+      const f = new FormData();
+      f.set("ownerId", ownerId);
+      f.set("receipt", file);
+      const r = await readClaimReceiptAi(f);
+      if (!r.ok) {
+        setReadNote({
+          tone: "warn",
+          text: r.unconfigured
+            ? "領収書は添付しました。自動読み取りは設定されていないので、項目は手で入力してください。"
+            : `領収書は添付しました。${r.error}`,
+        });
+        return;
+      }
+      const d = r.data,
+        filled: string[] = [];
+      if (d.merchant) {
+        setField("merchant", d.merchant);
+        filled.push("支払先");
+      }
+      if (d.date) {
+        setField("date", d.date);
+        filled.push("日付");
+      }
+      if (d.amount) {
+        setField("amount", String(d.amount));
+        filled.push("金額");
+      }
+      if (d.category) {
+        setField("category", d.category);
+        filled.push("分類");
+      }
+      if (isEmpty("title") && (d.note || d.merchant)) {
+        setField("title", (d.note || `${d.merchant}での支払い`).slice(0, 150));
+        filled.push("件名");
+      }
+      setReadNote({
+        tone: "ok",
+        text: `読み取って入力しました（${filled.join("・")}）。間違いがないか、必ず確認してください。`,
+      });
+    } catch {
+      setReadNote({
+        tone: "warn",
+        text: "領収書は添付しました。自動読み取りに失敗したので、項目は手で入力してください。",
+      });
+    } finally {
+      setReading(false);
+    }
+  }
   return (
     <Card>
       <CardSection>
@@ -37,6 +128,7 @@ export function ClaimForm({
           精算先：{workspaceName} ／ 金額は税込・整数円で入力してください。
         </p>
         <form
+          ref={formRef}
           className="space-y-5"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -133,17 +225,69 @@ export function ClaimForm({
             />
           </label>
           <div>
-            <label className="block text-sm">
-              レシート・領収書（申請時に必須）
+            <p className="text-sm">レシート・領収書（申請時に必須）</p>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                void takeFile(e.dataTransfer.files[0]);
+              }}
+              className={`mt-1 rounded-xl border-2 border-dashed p-6 text-center text-sm ${
+                dragging
+                  ? "border-sky-500 bg-sky-50"
+                  : "border-slate-300 bg-slate-50"
+              }`}
+            >
+              <p className="text-slate-700">
+                ここに領収書の写真・PDFをドラッグ＆ドロップ
+              </p>
+              <p className="my-1 text-xs text-slate-500">または</p>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                フォルダから選ぶ
+              </button>
               <input
+                ref={fileRef}
                 type="file"
                 name="receipt"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
-                className={`mt-1 ${inputClass}`}
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(e) => void takeFile(e.target.files?.[0])}
               />
-            </label>
+              {fileName && (
+                <p className="mt-3 break-all text-xs text-slate-600">
+                  選択中：{fileName}
+                </p>
+              )}
+            </div>
+            {reading && (
+              <p role="status" className="mt-2 text-sm text-sky-700">
+                領収書を読み取っています…（数秒かかります）
+              </p>
+            )}
+            {readNote && (
+              <p
+                role="status"
+                className={`mt-2 rounded-lg p-3 text-sm ${
+                  readNote.tone === "ok"
+                    ? "bg-emerald-50 text-emerald-900"
+                    : "bg-amber-50 text-amber-900"
+                }`}
+              >
+                {readNote.text}
+              </p>
+            )}
             <p className="mt-2 text-xs text-slate-500">
-              3MB以内のJPEG・PNG・WebP・PDF。画像は表示用に向きとサイズを整えて保存します。OCRによる自動読取はありません。
+              3MB以内のJPEG・PNG・WebP・PDF。画像は表示用に向きとサイズを整えて保存します。写真を選ぶと、AIが内容を読み取って入力欄に入れます（画像は読み取りのために外部のAIサービスへ送られます）。
             </p>
             {data?.filename && (
               <label className="mt-2 flex gap-2 text-sm">

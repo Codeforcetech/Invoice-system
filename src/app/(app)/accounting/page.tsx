@@ -92,13 +92,41 @@ export default async function AccountingPage({
     const net = inMoney.reduce((n, l) => n + l.debit - l.credit, 0);
     const others = e.lines.filter((l) => !moneyIds.has(l.accountId));
     const names = [...new Set(others.map((l) => l.account.name))].join("・");
-    if (!inMoney.length)
+    if (!inMoney.length) {
+      const total = e.lines.reduce((n, l) => n + l.debit, 0);
+      // 請求書の発行や、支払管理・経費精算の登録など、お金がまだ動いていない記録。
+      if (e.lines.some((l) => l.account.code === "120" && l.debit > 0))
+        return {
+          kind: "入金待ち",
+          tone: "text-amber-700",
+          amount: total,
+          names: "請求書の売上（まだ入金されていません）",
+        };
+      if (
+        e.lines.some(
+          (l) =>
+            (l.account.code === "200" || l.account.code === "210") &&
+            l.credit > 0,
+        )
+      )
+        return {
+          kind: "支払い待ち",
+          tone: "text-amber-700",
+          amount: total,
+          names: `${
+            others
+              .map((l) => l.account.name)
+              .filter((n) => n !== "買掛金" && n !== "未払金")
+              .join("・") || "費用"
+          }（まだ支払っていません）`,
+        };
       return {
         kind: "その他",
         tone: "text-slate-600",
-        amount: e.lines.reduce((n, l) => n + l.debit, 0),
+        amount: total,
         names: e.lines.map((l) => l.account.name).join(" → "),
       };
+    }
     if (net > 0)
       return { kind: "入金", tone: "text-emerald-700", amount: net, names };
     if (net < 0)
@@ -213,6 +241,7 @@ export default async function AccountingPage({
           </details>
           <p className="text-xs text-slate-500">
             記録の開始日 {dateText(setting.startDate)} ／ 金額は円・税込みです。
+            請求書・支払管理・経費精算に入力した内容は、自動でここに記録されます。それ以外のお金（利息・現金売上・給与・税金など）は、「お金の出入りを記録」か「銀行・カード明細の取込」で追加します。
           </p>
           {view === "accounts" ? (
             <AccountManager accounts={accounts} />
