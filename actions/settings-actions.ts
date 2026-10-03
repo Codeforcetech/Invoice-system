@@ -5,23 +5,25 @@ import { revalidatePath } from "next/cache";
 import { isEmbeddedStamp } from "@/lib/invoice/resolveStampImageUrl";
 import { loadPdfStamp } from "@/lib/pdf/stamp";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { settingsUpdateSchema, type SettingsUpdateInput } from "@/lib/validators/settings";
 
 export async function getSettings() {
-  const user = await requireUser();
-  return getOrCreateSystemSetting(user.id);
+  const ws = await requireWorkspace("VIEWER");
+  return getOrCreateSystemSetting(ws.ownerId);
 }
 
 export async function updateSettings(raw: unknown) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("ADMIN");
   const input = settingsUpdateSchema.parse(raw) satisfies SettingsUpdateInput;
 
   if (input.stampImageUrl && isEmbeddedStamp(input.stampImageUrl)) await loadPdfStamp(input.stampImageUrl);
 
-  const updated = await prisma.systemSetting.upsert({
-    where: { userId: user.id },
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.systemSetting.upsert({
+    where: { userId: ws.ownerId },
     update: {
       companyName: input.companyName,
       invoiceRegistrationNumber: input.invoiceRegistrationNumber ?? null,
@@ -41,7 +43,7 @@ export async function updateSettings(raw: unknown) {
       taxRate: input.taxRate,
     },
     create: {
-      userId: user.id,
+      userId: ws.ownerId,
       companyName: input.companyName,
       invoiceRegistrationNumber: input.invoiceRegistrationNumber ?? null,
       postalCode: input.postalCode ?? null,
@@ -59,6 +61,9 @@ export async function updateSettings(raw: unknown) {
       transferNote: input.transferNote ?? null,
       taxRate: input.taxRate,
     },
+    });
+    await recordAudit(tx, ws, { action: "SETTING_UPDATE", entity: "SETTING", summary: "自社情報・請求設定を更新" });
+    return row;
   });
 
   revalidatePath("/settings");

@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
 import { itemTemplateUpsertSchema, type ItemTemplateUpsertInput } from "@/lib/validators/item-template";
 
 function toDecimal(n: number) {
@@ -12,19 +12,19 @@ function toDecimal(n: number) {
 }
 
 export async function listItemTemplates() {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   return prisma.invoiceItemTemplate.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     orderBy: { createdAt: "desc" },
   });
 }
 
 export async function createItemTemplate(raw: unknown) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = itemTemplateUpsertSchema.parse(raw) satisfies ItemTemplateUpsertInput;
   const created = await prisma.invoiceItemTemplate.create({
     data: {
-      userId: user.id,
+      userId: ws.ownerId,
       name: input.name,
       productName: input.productName,
       unit: input.unit?.trim() || null,
@@ -40,10 +40,10 @@ export async function createItemTemplate(raw: unknown) {
 }
 
 export async function updateItemTemplate(params: { id: string; data: unknown }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = itemTemplateUpsertSchema.parse(params.data) satisfies ItemTemplateUpsertInput;
   const row = await prisma.invoiceItemTemplate.findFirst({
-    where: { id: params.id, userId: user.id },
+    where: { id: params.id, userId: ws.ownerId },
     select: { id: true },
   });
   if (!row) throw new Error("FORBIDDEN_TEMPLATE");
@@ -63,9 +63,9 @@ export async function updateItemTemplate(params: { id: string; data: unknown }) 
 }
 
 export async function deleteItemTemplate(params: { id: string }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const row = await prisma.invoiceItemTemplate.findFirst({
-    where: { id: params.id, userId: user.id },
+    where: { id: params.id, userId: ws.ownerId },
     select: { id: true },
   });
   if (!row) throw new Error("FORBIDDEN_TEMPLATE");

@@ -2,11 +2,19 @@
 import { accountingLock } from "@/lib/accounting/service";
 import { syncInvoice } from "@/lib/accounting/sync";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
+import { PermissionError } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 import { receiptSchema } from "@/lib/invoice/receipt";
 export async function recordInvoiceReceipt(raw: unknown) {
-  const user = await requireUser();
+  let ws: Awaited<ReturnType<typeof requireWorkspace>>;
+  try {
+    ws = await requireWorkspace("EDITOR");
+  } catch (e) {
+    if (e instanceof PermissionError) return { ok: false, error: e.message };
+    throw e;
+  }
   const parsed = receiptSchema.safeParse(raw);
   if (!parsed.success)
     return {
@@ -17,11 +25,11 @@ export async function recordInvoiceReceipt(raw: unknown) {
   const { invoiceId, version, receivedDate } = parsed.data;
   try {
     const result = await prisma.$transaction(async tx=>{
-    await accountingLock(tx,user.id);
+    await accountingLock(tx,ws.ownerId);
     const result = await tx.invoice.updateMany({
       where: {
         id: invoiceId,
-        createdById: user.id,
+        createdById: ws.ownerId,
         status: "ISSUED",
         receiptMatchId: null,
         mergedIntoId: null,
@@ -29,7 +37,15 @@ export async function recordInvoiceReceipt(raw: unknown) {
       },
       data: { receivedDate: receivedDate ? new Date(receivedDate) : null },
     });
-    if(result.count) await syncInvoice(tx,user.id,invoiceId);
+    if(result.count) {
+      await syncInvoice(tx,ws.ownerId,invoiceId);
+      await recordAudit(tx, ws, {
+        action: receivedDate ? "INVOICE_RECEIVED" : "INVOICE_RECEIVED_CLEAR",
+        entity: "INVOICE",
+        entityId: invoiceId,
+        summary: receivedDate ? `入金を記録（${receivedDate}）` : "入金記録を解除",
+      });
+    }
     return result;
     });
     revalidatePath("/accounting", "layout");

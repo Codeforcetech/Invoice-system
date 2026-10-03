@@ -5,6 +5,7 @@ vi.mock("@/lib/auth/require-user", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { prisma } from "@/lib/db/prisma";
+import { purgeAudit } from "./audit-cleanup";
 import {
   initializeAccounting,
   saveJournal,
@@ -19,6 +20,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       await prisma.journalEntry.deleteMany({
         where: { userId: { in: ["accounting-test-a", "accounting-test-b"] } },
       });
+      await purgeAudit(["accounting-test-a", "accounting-test-b"]);
       await prisma.user.deleteMany({
         where: { id: { in: ["accounting-test-a", "accounting-test-b"] } },
       });
@@ -36,6 +38,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       await prisma.journalEntry.deleteMany({
         where: { userId: { in: ["accounting-test-a", "accounting-test-b"] } },
       });
+      await purgeAudit(["accounting-test-a", "accounting-test-b"]);
       await prisma.user.deleteMany({
         where: { id: { in: ["accounting-test-a", "accounting-test-b"] } },
       });

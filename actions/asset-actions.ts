@@ -1,7 +1,9 @@
 "use server";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
+import { PermissionError } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 import {
   accountingLock,
@@ -27,25 +29,26 @@ function failure(e: unknown) {
     error:
       e instanceof z.ZodError
         ? e.issues[0].message
-        : e instanceof Error &&
+        : e instanceof PermissionError ||
+            (e instanceof Error &&
             !e.message.includes("\n") &&
-            !e.message.includes("prisma")
+            !e.message.includes("prisma"))
           ? e.message
           : "保存できませんでした。画面を更新して再度お試しください。",
   };
 }
 export async function prepareAssetAccounts() {
-  const user = await requireUser();
   try {
+    const ws = await requireWorkspace("ADMIN");
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       if (
-        !(await tx.accountingSetting.findUnique({ where: { userId: user.id } }))
+        !(await tx.accountingSetting.findUnique({ where: { userId: ws.ownerId } }))
       )
         throw new Error("会計の初期設定が必要です。");
       // Reserved new code: do not silently overwrite an existing custom account.
       const existing = await tx.account.findUnique({
-        where: { userId_code: { userId: user.id, code: "DEP" } },
+        where: { userId_code: { userId: ws.ownerId, code: "DEP" } },
       });
       if (existing && (existing.kind !== "EXPENSE" || !existing.active))
         throw new Error(
@@ -54,13 +57,15 @@ export async function prepareAssetAccounts() {
       if (!existing)
         await tx.account.create({
           data: {
-            userId: user.id,
+            userId: ws.ownerId,
             code: "DEP",
             name: "減価償却費",
             kind: "EXPENSE",
             system: true,
           },
         });
+      if (!existing)
+        await recordAudit(tx, ws, { action: "ASSET_ACCOUNT_PREPARE", entity: "ACCOUNT", summary: "減価償却費の勘定科目を準備" });
     });
     refresh();
     return { ok: true as const };
@@ -69,13 +74,13 @@ export async function prepareAssetAccounts() {
   }
 }
 export async function saveAsset(raw: unknown) {
-  const user = await requireUser();
   try {
+    const ws = await requireWorkspace("ADMIN");
     const { id, version, ...input } = assetSchema.parse(raw);
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       const setting = await tx.accountingSetting.findUnique({
-        where: { userId: user.id },
+        where: { userId: ws.ownerId },
       });
       if (!setting) throw new Error("会計の初期設定が必要です。");
       if (input.serviceDate < dateText(setting.startDate))
@@ -86,7 +91,7 @@ export async function saveAsset(raw: unknown) {
         throw new Error("取得日・使用開始日は今日以前で指定してください。");
       const accounts = await tx.account.findMany({
         where: {
-          userId: user.id,
+          userId: ws.ownerId,
           active: true,
           id: { in: [input.assetAccountId, input.expenseAccountId] },
         },
@@ -110,7 +115,7 @@ export async function saveAsset(raw: unknown) {
         serviceDate: new Date(input.serviceDate),
       };
       if (existing) {
-        if (existing.userId !== user.id)
+        if (existing.userId !== ws.ownerId)
           throw new Error("資産が見つかりません。");
         if (existing.updatedAt.toISOString() !== version)
           throw new Error("内容が更新されています。画面を開き直してください。");
@@ -131,9 +136,11 @@ export async function saveAsset(raw: unknown) {
           where: { id },
           data: { ...data, revision: { increment: 1 } },
         });
+        await recordAudit(tx, ws, { action: "ASSET_UPDATE", entity: "ASSET", entityId: id, summary: `固定資産「${input.name.slice(0, 60)}」を更新` });
       } else {
         if (version) throw new Error("資産が見つかりません。");
-        await tx.fixedAsset.create({ data: { id, userId: user.id, ...data } });
+        await tx.fixedAsset.create({ data: { id, userId: ws.ownerId, ...data } });
+        await recordAudit(tx, ws, { action: "ASSET_CREATE", entity: "ASSET", entityId: id, summary: `固定資産「${input.name.slice(0, 60)}」を登録` });
       }
     });
     refresh();
@@ -143,8 +150,8 @@ export async function saveAsset(raw: unknown) {
   }
 }
 export async function postDepreciation(raw: unknown) {
-  const user = await requireUser();
   try {
+    const ws = await requireWorkspace("EDITOR");
     const input = z
       .object({
         id: z.string().uuid(),
@@ -155,9 +162,9 @@ export async function postDepreciation(raw: unknown) {
       })
       .parse(raw);
     const count = await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       const asset = await tx.fixedAsset.findFirst({
-        where: { id: input.id, userId: user.id },
+        where: { id: input.id, userId: ws.ownerId },
         include: { postings: { where: { active: true } } },
       });
       if (!asset) throw new Error("資産が見つかりません。");
@@ -199,7 +206,7 @@ export async function postDepreciation(raw: unknown) {
       const amount = rows.reduce((s, r) => s + r.amount, 0);
       const entry = await postJournal(
         tx,
-        user.id,
+        ws.ownerId,
         {
           requestKey: `asset:${asset.id}:${asset.revision}:${input.mode}:${end}`,
           date,
@@ -214,7 +221,7 @@ export async function postDepreciation(raw: unknown) {
       );
       await tx.depreciationPosting.createMany({
         data: rows.map((r) => ({
-          userId: user.id,
+          userId: ws.ownerId,
           assetId: asset.id,
           entryId: entry.id,
           month: r.month,
@@ -225,6 +232,12 @@ export async function postDepreciation(raw: unknown) {
         where: { id: asset.id },
         data: { revision: { increment: 1 } },
       });
+      await recordAudit(tx, ws, {
+        action: "DEPRECIATION_POST",
+        entity: "ASSET",
+        entityId: asset.id,
+        summary: `減価償却を記帳（${rows[0].month}〜${rows[rows.length - 1].month}）${asset.name.slice(0, 60)}`,
+      });
       return rows.length;
     });
     refresh();
@@ -234,8 +247,8 @@ export async function postDepreciation(raw: unknown) {
   }
 }
 export async function cancelDepreciation(raw: unknown) {
-  const user = await requireUser();
   try {
+    const ws = await requireWorkspace("APPROVER");
     const v = z
       .object({
         id: z.string().uuid(),
@@ -245,9 +258,9 @@ export async function cancelDepreciation(raw: unknown) {
       })
       .parse(raw);
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       const asset = await tx.fixedAsset.findFirst({
-        where: { id: v.id, userId: user.id },
+        where: { id: v.id, userId: ws.ownerId },
         include: {
           postings: { where: { active: true }, orderBy: { month: "desc" } },
         },
@@ -261,21 +274,21 @@ export async function cancelDepreciation(raw: unknown) {
       const entry = await tx.journalEntry.findFirstOrThrow({
         where: {
           id: v.entryId,
-          userId: user.id,
+          userId: ws.ownerId,
           source: "DEPRECIATION",
           sourceId: asset.id,
         },
       });
       await reverseJournal(
         tx,
-        user.id,
+        ws.ownerId,
         entry.id,
         dateText(entry.date),
         v.reason,
       );
       await tx.depreciationPosting.updateMany({
         where: {
-          userId: user.id,
+          userId: ws.ownerId,
           assetId: asset.id,
           entryId: entry.id,
           active: true,
@@ -290,6 +303,12 @@ export async function cancelDepreciation(raw: unknown) {
         where: { id: asset.id },
         data: { revision: { increment: 1 } },
       });
+      await recordAudit(tx, ws, {
+        action: "DEPRECIATION_CANCEL",
+        entity: "ASSET",
+        entityId: asset.id,
+        summary: `減価償却の記帳を取消（${asset.name.slice(0, 60)}）理由: ${v.reason.slice(0, 100)}`,
+      });
     });
     refresh();
     return { ok: true as const };
@@ -298,8 +317,8 @@ export async function cancelDepreciation(raw: unknown) {
   }
 }
 export async function archiveAsset(raw: unknown) {
-  const user = await requireUser();
   try {
+    const ws = await requireWorkspace("ADMIN");
     const v = z
       .object({
         id: z.string().uuid(),
@@ -308,9 +327,9 @@ export async function archiveAsset(raw: unknown) {
       })
       .parse(raw);
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       const asset = await tx.fixedAsset.findFirst({
-        where: { id: v.id, userId: user.id },
+        where: { id: v.id, userId: ws.ownerId },
       });
       if (!asset || asset.updatedAt.toISOString() !== v.version)
         throw new Error("内容が更新されています。画面を更新してください。");
@@ -318,6 +337,7 @@ export async function archiveAsset(raw: unknown) {
         where: { id: asset.id },
         data: { archived: v.archived, revision: { increment: 1 } },
       });
+      await recordAudit(tx, ws, { action: v.archived ? "ASSET_ARCHIVE" : "ASSET_RESTORE", entity: "ASSET", entityId: asset.id, summary: `固定資産「${asset.name.slice(0, 60)}」を${v.archived ? "保管" : "復帰"}` });
     });
     refresh();
     return { ok: true as const };

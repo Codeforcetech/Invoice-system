@@ -33,6 +33,43 @@ model User {
   notificationPreference NotificationPreference?
   fixedAssets            FixedAsset[]
   reportAnnotations      ReportAnnotation[]
+  workspaceMembers       WorkspaceMember[]       @relation("WorkspaceOwner")
+  workspaceMembership    WorkspaceMember?        @relation("WorkspaceMemberUser")
+  auditLogsOwned         AuditLog[]              @relation("AuditOwner")
+  auditLogsActed         AuditLog[]              @relation("AuditActor")
+}
+
+// A workspace is identified by its owner's user id, so existing ownership columns
+// keep working. A user is a member of at most one workspace; the owner is implicitly ADMIN.
+model WorkspaceMember {
+  id        String   @id @default(cuid())
+  ownerId   String
+  userId    String   @unique
+  role      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  user      User     @relation("WorkspaceMemberUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, active])
+}
+
+// Append-only record of who did what in a workspace.
+model AuditLog {
+  id        String   @id @default(cuid())
+  ownerId   String
+  actorId   String
+  action    String
+  entity    String
+  entityId  String?
+  summary   String
+  createdAt DateTime @default(now())
+  owner     User     @relation("AuditOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  actor     User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, createdAt])
+  @@index([ownerId, entity, entityId])
 }
 
 // Reporting metadata; source records and accounting amounts are never changed.

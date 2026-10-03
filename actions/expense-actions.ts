@@ -3,7 +3,9 @@ import { accountingLock } from "@/lib/accounting/service";
 import { syncExpense } from "@/lib/accounting/sync";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
+import { PermissionError } from "@/lib/workspace/access";
 import {
   expenseSchema,
   dateValue,
@@ -24,9 +26,9 @@ const select = {
   attachment: { select: { filename: true } },
 } as const;
 export async function listExpenses(): Promise<ExpenseRow[]> {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   const rows = await prisma.expense.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     select,
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
   });
@@ -39,9 +41,9 @@ export async function listExpenses(): Promise<ExpenseRow[]> {
   }));
 }
 export async function getExpense(id: string): Promise<ExpenseRow | null> {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   const row = await prisma.expense.findFirst({
-    where: { id, userId: user.id },
+    where: { id, userId: ws.ownerId },
     select,
   });
   if (!row) return null;
@@ -57,7 +59,13 @@ export async function getExpense(id: string): Promise<ExpenseRow | null> {
 export async function saveExpense(
   form: FormData,
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
-  const user = await requireUser();
+  let ws: Awaited<ReturnType<typeof requireWorkspace>>;
+  try {
+    ws = await requireWorkspace("EDITOR");
+  } catch (e) {
+    if (e instanceof PermissionError) return { ok: false, error: e.message };
+    throw e;
+  }
   const parsed = expenseSchema.safeParse({
     ...Object.fromEntries(form),
     removeAttachment: form.get("removeAttachment") === "true",
@@ -72,7 +80,7 @@ export async function saveExpense(
   try {
     if (version) {
       const owned = await prisma.expense.findFirst({
-        where: { id, userId: user.id },
+        where: { id, userId: ws.ownerId },
         select: { updatedAt: true },
       });
       if (!owned) return { ok: false, error: "支払情報が見つかりません。" };
@@ -93,10 +101,10 @@ export async function saveExpense(
       paidDate: paidDate ? new Date(paidDate) : null,
     };
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx,user.id);
+      await accountingLock(tx,ws.ownerId);
       if (version) {
         const updated = await tx.expense.updateMany({
-          where: { id, userId: user.id, updatedAt: new Date(version) },
+          where: { id, userId: ws.ownerId, updatedAt: new Date(version) },
           data,
         });
         if (updated.count !== 1) throw new Error("STALE_EXPENSE");
@@ -107,12 +115,18 @@ export async function saveExpense(
           select: { userId: true },
         });
         if (existing) {
-          if (existing.userId !== user.id) throw new Error("UNAVAILABLE");
+          if (existing.userId !== ws.ownerId) throw new Error("UNAVAILABLE");
           return;
         }
-        await tx.expense.create({ data: { ...data, id, userId: user.id } });
+        await tx.expense.create({ data: { ...data, id, userId: ws.ownerId } });
       }
-      await syncExpense(tx,user.id,id);
+      await syncExpense(tx,ws.ownerId,id);
+      await recordAudit(tx, ws, {
+        action: version ? "EXPENSE_UPDATE" : "EXPENSE_CREATE",
+        entity: "PAYMENT",
+        entityId: id,
+        summary: version ? "支払を更新" : "支払を登録",
+      });
       if (attachment) {
         await tx.expenseAttachment.upsert({
           where: { expenseId: id },
@@ -121,7 +135,7 @@ export async function saveExpense(
         });
       } else if (removeAttachment)
         await tx.expenseAttachment.deleteMany({
-          where: { expenseId: id, expense: { userId: user.id } },
+          where: { expenseId: id, expense: { userId: ws.ownerId } },
         });
     });
     revalidatePath("/accounting", "layout");

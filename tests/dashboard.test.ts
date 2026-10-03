@@ -13,6 +13,7 @@ const mock = vi.hoisted(() => ({
 vi.mock("@/lib/auth/require-user", () => ({ requireUser: mock.user }));
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    workspaceMember: { findUnique: async () => null },
     company: { findMany: mock.companies },
     invoice: { count: mock.count, groupBy: mock.groups, findMany: mock.recent },
     systemSetting: { findUnique: mock.settings },

@@ -11,6 +11,7 @@ vi.mock("@/lib/auth/session", () => ({ getSession: mocks.session }));
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     user: { findUnique: mocks.user },
+    workspaceMember: { findUnique: async () => null },
     invoice: { findFirst: mocks.invoice },
     systemSetting: { findUnique: mocks.settings },
   },

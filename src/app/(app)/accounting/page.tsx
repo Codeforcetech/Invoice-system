@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { accountingReport } from "@/lib/accounting/reports";
 import { dateText, yen } from "@/lib/accounting/model";
 import { japanToday } from "@/lib/expenses/model";
@@ -17,15 +18,15 @@ export default async function AccountingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("VIEWER");
   const sp = await searchParams;
   const str = (k: string) =>
     typeof sp[k] === "string" ? (sp[k] as string) : "";
   const setting = await prisma.accountingSetting.findUnique({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
   });
   const accounts = await prisma.account.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     orderBy: { code: "asc" },
   });
   const view = ["journal", "ledger", "transactions", "accounts"].includes(
@@ -44,14 +45,14 @@ export default async function AccountingPage({
     error = "";
   if (setting && view !== "accounts")
     try {
-      report = await accountingReport(user.id, { view, from, to, accountId });
+      report = await accountingReport(ws.ownerId, { view, from, to, accountId });
     } catch (e) {
       error = e instanceof Error ? e.message : "帳簿を表示できませんでした。";
     }
   const reversals = report
     ? await prisma.journalEntry.findMany({
         where: {
-          userId: user.id,
+          userId: ws.ownerId,
           reversalOf: { in: report.entries.map((e) => e.id) },
         },
         select: { reversalOf: true },
@@ -66,7 +67,7 @@ export default async function AccountingPage({
         title="会計・帳簿"
         description="日々の取引を記録し、仕訳と科目別の残高を確認します。"
         action={
-          setting ? (
+          setting && hasRole(ws.role, "EDITOR") ? (
             <AppButtonLink href="/accounting/transactions/new">
               ＋ 取引を入力
             </AppButtonLink>

@@ -75,6 +75,8 @@ export const navigation: {
 export function SidebarContent(props: {
   email: string;
   showAdmin: boolean;
+  canEdit?: boolean;
+  memberRole?: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -91,6 +93,7 @@ export function SidebarContent(props: {
       >
         <BrandLogo light />
       </Link>
+      {props.canEdit !== false && (
       <Link
         href="/invoices/new"
         onClick={props.onNavigate}
@@ -99,7 +102,8 @@ export function SidebarContent(props: {
         <AppIcon name="plus" />
         請求書を作成
       </Link>
-      <nav aria-label="メインメニュー" className="mt-6 flex-1 space-y-6">
+      )}
+      <nav aria-label="メインメニュー" className={`${props.canEdit !== false ? "mt-6" : "mt-9"} flex-1 space-y-6`}>
         {[...new Set(entries.map((n) => n.group))].map((group) => (
           <div key={group}>
             <p className="mb-2 px-3 text-[10px] font-medium tracking-widest text-slate-400">
@@ -138,7 +142,11 @@ export function SidebarContent(props: {
           </span>
           <div className="min-w-0">
             <p className="text-[10px] text-slate-400">
-              {props.showAdmin ? "管理者アカウント" : "マイアカウント"}
+              {props.memberRole
+                ? `事業所の権限：${props.memberRole}`
+                : props.showAdmin
+                  ? "管理者アカウント"
+                  : "マイアカウント"}
             </p>
             <p
               className="mt-0.5 truncate text-xs text-slate-200"
@@ -158,7 +166,12 @@ export function SidebarContent(props: {
     </div>
   );
 }
-export function AppSidebar(props: { email: string; showAdmin: boolean }) {
+export function AppSidebar(props: {
+  email: string;
+  showAdmin: boolean;
+  canEdit?: boolean;
+  memberRole?: string;
+}) {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] overflow-y-auto bg-[#132b32] lg:block">
       <SidebarContent {...props} />

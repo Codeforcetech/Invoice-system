@@ -1,7 +1,8 @@
 import { DashboardReports } from "@/components/management/dashboard-reports";
 import { listExpenses } from "@/actions/expense-actions";
 import { expenseSummary, japanToday } from "@/lib/expenses/model";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import {
@@ -14,9 +15,9 @@ import {
 export default async function DashboardPage(props: {
   searchParams?: Promise<SearchValues>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("VIEWER");
   const filters = resolveSalesFilters(await props.searchParams);
-  const owner = { createdById: user.id, mergedIntoId: null };
+  const owner = { createdById: ws.ownerId, mergedIntoId: null };
   const [
     companies,
     invoiceCount,
@@ -27,7 +28,7 @@ export default async function DashboardPage(props: {
     settings,
   ] = await Promise.all([
     prisma.company.findMany({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -39,7 +40,7 @@ export default async function DashboardPage(props: {
       where: {
         ...owner,
         status: "ISSUED",
-        company: { userId: user.id },
+        company: { userId: ws.ownerId },
         ...(filters.companyId ? { companyId: filters.companyId } : {}),
         issueDate: {
           gte: monthStart(filters.queryFrom),
@@ -63,7 +64,7 @@ export default async function DashboardPage(props: {
       },
     }),
     prisma.systemSetting.findUnique({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       select: {
         companyName: true,
         address: true,
@@ -82,15 +83,16 @@ export default async function DashboardPage(props: {
   );
   return (
     <DashboardView
+      canEdit={hasRole(ws.role, "EDITOR")}
       reports={
         <DashboardReports
-          userId={user.id}
+          userId={ws.ownerId}
           from={filters.from}
           to={filters.to}
         />
       }
       data={{
-        name: user.name,
+        name: ws.user.name,
         costs: {
           month: filters.current,
           total: expenseTotals.cost,

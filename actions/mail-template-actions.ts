@@ -3,23 +3,23 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
 import { mailTemplateUpsertSchema, type MailTemplateUpsertInput } from "@/lib/validators/mail-template";
 
 export async function listMailTemplates() {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   return prisma.mailTemplate.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     orderBy: { createdAt: "desc" },
   });
 }
 
 export async function createMailTemplate(raw: unknown) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = mailTemplateUpsertSchema.parse(raw) satisfies MailTemplateUpsertInput;
   const created = await prisma.mailTemplate.create({
     data: {
-      userId: user.id,
+      userId: ws.ownerId,
       name: input.name,
       subjectTemplate: input.subjectTemplate,
       bodyTemplate: input.bodyTemplate,
@@ -31,10 +31,10 @@ export async function createMailTemplate(raw: unknown) {
 }
 
 export async function updateMailTemplate(params: { id: string; data: unknown }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = mailTemplateUpsertSchema.parse(params.data) satisfies MailTemplateUpsertInput;
   const row = await prisma.mailTemplate.findFirst({
-    where: { id: params.id, userId: user.id },
+    where: { id: params.id, userId: ws.ownerId },
     select: { id: true },
   });
   if (!row) throw new Error("FORBIDDEN_MAIL_TEMPLATE");
@@ -51,9 +51,9 @@ export async function updateMailTemplate(params: { id: string; data: unknown }) 
 }
 
 export async function deleteMailTemplate(params: { id: string }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const row = await prisma.mailTemplate.findFirst({
-    where: { id: params.id, userId: user.id },
+    where: { id: params.id, userId: ws.ownerId },
     select: { id: true },
   });
   if (!row) throw new Error("FORBIDDEN_MAIL_TEMPLATE");

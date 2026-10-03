@@ -1,11 +1,19 @@
 "use server";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { PermissionError } from "@/lib/workspace/access";
+import { recordAudit } from "@/lib/workspace/audit";
 import { prisma } from "@/lib/db/prisma";
 import { accountingLock } from "@/lib/accounting/service";
 import { annotationSchema } from "@/lib/management/model";
 import { revalidatePath } from "next/cache";
 export async function saveReportAnnotation(raw: unknown) {
-  const user = await requireUser();
+  let ws: Awaited<ReturnType<typeof requireWorkspace>>;
+  try {
+    ws = await requireWorkspace("EDITOR");
+  } catch (e) {
+    if (e instanceof PermissionError) return { ok: false, error: e.message };
+    throw e;
+  }
   const parsed = annotationSchema.safeParse(raw);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0].message };
@@ -14,32 +22,32 @@ export async function saveReportAnnotation(raw: unknown) {
     if (v.department === "__none__" || v.office === "__none__")
       throw new Error("この分類名は使用できません。");
     await prisma.$transaction(async (tx) => {
-      await accountingLock(tx, user.id);
+      await accountingLock(tx, ws.ownerId);
       const target =
         v.targetType === "INVOICE"
           ? await tx.invoice.findFirst({
-              where: { id: v.targetId, createdById: user.id },
+              where: { id: v.targetId, createdById: ws.ownerId },
             })
           : v.targetType === "EXPENSE"
             ? await tx.expense.findFirst({
-                where: { id: v.targetId, userId: user.id },
+                where: { id: v.targetId, userId: ws.ownerId },
               })
             : v.targetType === "CLAIM"
               ? await tx.expenseClaim.findFirst({
                   where: {
                     id: v.targetId,
-                    ownerId: user.id,
+                    ownerId: ws.ownerId,
                     status: { in: ["APPROVED", "PAID"] },
                   },
                 })
               : v.targetType === "ASSET"
                 ? await tx.fixedAsset.findFirst({
-                    where: { id: v.targetId, userId: user.id },
+                    where: { id: v.targetId, userId: ws.ownerId },
                   })
                 : await tx.journalEntry.findFirst({
                     where: {
                       id: v.targetId,
-                      userId: user.id,
+                      userId: ws.ownerId,
                       reversalOf: null,
                       source: { in: ["MANUAL", "STATEMENT"] },
                     },
@@ -47,7 +55,7 @@ export async function saveReportAnnotation(raw: unknown) {
       if (!target) throw new Error("対象の取引を利用できません。");
       const where = {
         userId_targetType_targetId: {
-          userId: user.id,
+          userId: ws.ownerId,
           targetType: v.targetType,
           targetId: v.targetId,
         },
@@ -63,8 +71,14 @@ export async function saveReportAnnotation(raw: unknown) {
       };
       await tx.reportAnnotation.upsert({
         where,
-        create: { ...data, userId: user.id },
+        create: { ...data, userId: ws.ownerId },
         update: data,
+      });
+      await recordAudit(tx, ws, {
+        action: "ANNOTATION_SAVE",
+        entity: "REPORT",
+        entityId: v.targetId,
+        summary: `部門・事業所の分類を保存（${v.targetType}）`,
       });
     });
     revalidatePath("/reports");

@@ -36,9 +36,11 @@ export type DashboardData = {
 export function DashboardView({
   data,
   reports,
+  canEdit = true,
 }: {
   data: DashboardData;
   reports?: import("react").ReactNode;
+  canEdit?: boolean;
 }) {
   const money = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
   const setup = [
@@ -75,10 +77,12 @@ export function DashboardView({
         title="ダッシュボード"
         description={`${data.name}さん、こんにちは。今日の請求業務をここから。`}
         action={
-          <AppButtonLink href="/invoices/new">
-            <AppIcon name="plus" />
-            請求書を作成
-          </AppButtonLink>
+          canEdit ? (
+            <AppButtonLink href="/invoices/new">
+              <AppIcon name="plus" />
+              請求書を作成
+            </AppButtonLink>
+          ) : undefined
         }
       />
       <SalesOverview

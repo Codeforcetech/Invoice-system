@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { listCompaniesForInvoiceForm } from "@/actions/company-actions";
 import { listItemTemplates } from "@/actions/item-template-actions";
@@ -15,7 +15,7 @@ function toStr(v: string | string[] | undefined) {
 export default async function NewInvoicePage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("EDITOR");
   const sp = (await props.searchParams) ?? {};
   const companyIdFromQuery = toStr(sp.companyId) || "";
 
@@ -23,7 +23,7 @@ export default async function NewInvoicePage(props: {
     listCompaniesForInvoiceForm(),
     listItemTemplates(),
     listMailTemplates(),
-    getOrCreateSystemSetting(user.id),
+    getOrCreateSystemSetting(ws.ownerId),
   ]);
 
   const itemTemplates = itemRows.map((t) => ({

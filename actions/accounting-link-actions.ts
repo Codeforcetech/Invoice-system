@@ -2,7 +2,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
 import { accountingLock, type Tx } from "@/lib/accounting/service";
 import { syncInvoice, syncExpense } from "@/lib/accounting/sync";
 import { daySchema, dateText, invoiceDateText } from "@/lib/accounting/model";
@@ -24,7 +25,7 @@ async function ready(tx: Tx, userId: string) {
     throw new Error("会計の初期設定を行ってください。");
 }
 export async function importAccountingSource(raw: unknown) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const v = z
     .object({
       type: z.enum(["invoice", "expense"]),
@@ -33,14 +34,14 @@ export async function importAccountingSource(raw: unknown) {
     })
     .parse(raw);
   await prisma.$transaction(async (tx) => {
-    await accountingLock(tx, u.id);
-    await ready(tx, u.id);
+    await accountingLock(tx, ws.ownerId);
+    await ready(tx, ws.ownerId);
     if (v.type === "invoice") {
       if (
         !(await tx.invoice.findFirst({
           where: {
             id: v.id,
-            createdById: u.id,
+            createdById: ws.ownerId,
             updatedAt: new Date(v.version),
             status: "ISSUED",
             mergedIntoId: null,
@@ -48,15 +49,17 @@ export async function importAccountingSource(raw: unknown) {
         }))
       )
         throw new Error("請求書が更新されました。再読み込みしてください。");
-      await syncInvoice(tx, u.id, v.id);
+      await syncInvoice(tx, ws.ownerId, v.id);
+      await recordAudit(tx, ws, { action: "SOURCE_IMPORT", entity: "INVOICE", entityId: v.id, summary: "請求書を会計へ連携" });
     } else {
       if (
         !(await tx.expense.findFirst({
-          where: { id: v.id, userId: u.id, updatedAt: new Date(v.version) },
+          where: { id: v.id, userId: ws.ownerId, updatedAt: new Date(v.version) },
         }))
       )
         throw new Error("支払いが更新されました。再読み込みしてください。");
-      await syncExpense(tx, u.id, v.id);
+      await syncExpense(tx, ws.ownerId, v.id);
+      await recordAudit(tx, ws, { action: "SOURCE_IMPORT", entity: "PAYMENT", entityId: v.id, summary: "支払いを会計へ連携" });
     }
   });
   refresh();
@@ -70,7 +73,7 @@ const selection = z
     "同じ請求書は一度だけ選んでください",
   );
 export async function matchReceipt(raw: unknown) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const v = z
     .object({
       id: z.string().uuid(),
@@ -85,11 +88,11 @@ export async function matchReceipt(raw: unknown) {
     .parse(raw);
   await prisma.$transaction(
     async (tx) => {
-      await accountingLock(tx, u.id);
-      await ready(tx, u.id);
+      await accountingLock(tx, ws.ownerId);
+      await ready(tx, ws.ownerId);
       const prior = await tx.receiptMatch.findUnique({ where: { id: v.id } });
       if (prior) {
-        if (prior.userId !== u.id || prior.cancelledAt)
+        if (prior.userId !== ws.ownerId || prior.cancelledAt)
           throw new Error("この消込は利用できません。");
         if (
           prior.amount !== v.amount ||
@@ -106,7 +109,7 @@ export async function matchReceipt(raw: unknown) {
       const invoices = await tx.invoice.findMany({
         where: {
           id: { in: v.invoices.map((i) => i.id) },
-          createdById: u.id,
+          createdById: ws.ownerId,
           status: "ISSUED",
           receivedDate: null,
           receiptMatchId: null,
@@ -129,7 +132,7 @@ export async function matchReceipt(raw: unknown) {
       if (invoices.reduce((s, i) => s + i.grandTotal, 0) !== v.amount)
         throw new Error("入金額と選択した請求書の振込請求額が一致しません。");
       const setting = await tx.accountingSetting.findUniqueOrThrow({
-        where: { userId: u.id },
+        where: { userId: ws.ownerId },
       });
       if (
         invoices.some(
@@ -142,7 +145,7 @@ export async function matchReceipt(raw: unknown) {
       await tx.receiptMatch.create({
         data: {
           id: v.id,
-          userId: u.id,
+          userId: ws.ownerId,
           date: new Date(v.date),
           amount: v.amount,
           payer: v.payer,
@@ -154,36 +157,48 @@ export async function matchReceipt(raw: unknown) {
           where: { id: i.id },
           data: { receivedDate: new Date(v.date), receiptMatchId: v.id },
         });
-        await syncInvoice(tx, u.id, i.id);
+        await syncInvoice(tx, ws.ownerId, i.id);
       }
+      await recordAudit(tx, ws, {
+        action: "RECEIPT_MATCH",
+        entity: "RECEIPT",
+        entityId: v.id,
+        summary: `入金消込（${v.date}）請求書${invoices.length}件`,
+      });
     },
     { timeout: 20000 },
   );
   refresh();
 }
 export async function cancelReceiptMatch(id: string) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("APPROVER");
   await prisma.$transaction(
     async (tx) => {
-      await accountingLock(tx, u.id);
+      await accountingLock(tx, ws.ownerId);
       const m = await tx.receiptMatch.findFirst({
-        where: { id, userId: u.id },
+        where: { id, userId: ws.ownerId },
       });
       if (!m) throw new Error("消込が見つかりません。");
       if (m.cancelledAt) return;
       const invoices = await tx.invoice.findMany({
-        where: { createdById: u.id, receiptMatchId: m.id },
+        where: { createdById: ws.ownerId, receiptMatchId: m.id },
       });
       for (const i of invoices) {
         await tx.invoice.update({
           where: { id: i.id },
           data: { receivedDate: null, receiptMatchId: null },
         });
-        await syncInvoice(tx, u.id, i.id);
+        await syncInvoice(tx, ws.ownerId, i.id);
       }
       await tx.receiptMatch.update({
         where: { id: m.id },
         data: { cancelledAt: new Date() },
+      });
+      await recordAudit(tx, ws, {
+        action: "RECEIPT_CANCEL",
+        entity: "RECEIPT",
+        entityId: m.id,
+        summary: `入金消込を取消（請求書${invoices.length}件）`,
       });
     },
     { timeout: 20000 },
@@ -243,7 +258,7 @@ async function createDraft(
   });
 }
 export async function combineInvoices(raw: unknown) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const v = z
     .object({
       requestKey: z.string().uuid(),
@@ -258,15 +273,15 @@ export async function combineInvoices(raw: unknown) {
     .parse(raw);
   const result = await prisma.$transaction(
     async (tx) => {
-      await accountingLock(tx, u.id);
-      await ready(tx, u.id);
-      const key = `combine:${u.id}:${v.requestKey}`;
+      await accountingLock(tx, ws.ownerId);
+      await ready(tx, ws.ownerId);
+      const key = `combine:${ws.ownerId}:${v.requestKey}`;
       const prior = await tx.invoice.findUnique({
         where: { recurringKey: key },
       });
       if (prior) {
         const originals = await tx.invoice.findMany({
-          where: { createdById: u.id, mergedIntoId: prior.id },
+          where: { createdById: ws.ownerId, mergedIntoId: prior.id },
           select: { id: true },
         });
         if (
@@ -284,7 +299,7 @@ export async function combineInvoices(raw: unknown) {
       const rows = await tx.invoice.findMany({
         where: {
           id: { in: v.invoices.map((i) => i.id) },
-          createdById: u.id,
+          createdById: ws.ownerId,
           status: "DRAFT",
           mergedIntoId: null,
           receivedDate: null,
@@ -328,10 +343,16 @@ export async function combineInvoices(raw: unknown) {
           })),
         ),
       });
-      const created = await createDraft(tx, u.id, input, first.taxRate, key);
+      const created = await createDraft(tx, ws.ownerId, input, first.taxRate, key);
       await tx.invoice.updateMany({
-        where: { id: { in: rows.map((r) => r.id) }, createdById: u.id },
+        where: { id: { in: rows.map((r) => r.id) }, createdById: ws.ownerId },
         data: { mergedIntoId: created.id },
+      });
+      await recordAudit(tx, ws, {
+        action: "INVOICE_COMBINE",
+        entity: "INVOICE",
+        entityId: created.id,
+        summary: `請求書${rows.length}件を合算して下書きを作成`,
       });
       return created;
     },
@@ -341,7 +362,7 @@ export async function combineInvoices(raw: unknown) {
   return result;
 }
 export async function createRecurringInvoice(raw: unknown) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const v = z
     .object({
       id: z.string().uuid(),
@@ -354,12 +375,12 @@ export async function createRecurringInvoice(raw: unknown) {
     })
     .parse(raw);
   await prisma.$transaction(async (tx) => {
-    await accountingLock(tx, u.id);
-    await ready(tx, u.id);
+    await accountingLock(tx, ws.ownerId);
+    await ready(tx, ws.ownerId);
     const inv = await tx.invoice.findFirst({
       where: {
         id: v.sourceId,
-        createdById: u.id,
+        createdById: ws.ownerId,
         updatedAt: new Date(v.version),
         mergedIntoId: null,
       },
@@ -384,13 +405,13 @@ export async function createRecurringInvoice(raw: unknown) {
     };
     const prior = await tx.recurringInvoice.findUnique({ where: { id: v.id } });
     if (prior) {
-      if (prior.userId !== u.id) throw new Error("定期請求を登録できません。");
+      if (prior.userId !== ws.ownerId) throw new Error("定期請求を登録できません。");
       return;
     }
     await tx.recurringInvoice.create({
       data: {
         id: v.id,
-        userId: u.id,
+        userId: ws.ownerId,
         companyId: inv.companyId,
         name: v.name,
         snapshot,
@@ -399,25 +420,27 @@ export async function createRecurringInvoice(raw: unknown) {
         dueDays: v.dueDays,
       },
     });
+    await recordAudit(tx, ws, { action: "RECURRING_CREATE", entity: "INVOICE", entityId: v.id, summary: `定期請求「${v.name.slice(0, 60)}」を登録` });
   });
   refresh();
 }
 export async function setRecurringActive(id: string, active: boolean) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   if (typeof active !== "boolean")
     throw new Error("入力内容を確認してください。");
   await prisma.$transaction(async (tx) => {
-    await accountingLock(tx, u.id);
+    await accountingLock(tx, ws.ownerId);
     const r = await tx.recurringInvoice.updateMany({
-      where: { id, userId: u.id },
+      where: { id, userId: ws.ownerId },
       data: { active },
     });
     if (!r.count) throw new Error("定期請求が見つかりません。");
+    await recordAudit(tx, ws, { action: active ? "RECURRING_RESUME" : "RECURRING_STOP", entity: "INVOICE", entityId: id, summary: `定期請求を${active ? "再開" : "停止"}` });
   });
   refresh();
 }
 export async function generateRecurringInvoice(raw: unknown) {
-  const u = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const v = z
     .object({
       id: z.string(),
@@ -426,10 +449,10 @@ export async function generateRecurringInvoice(raw: unknown) {
     .parse(raw);
   const result = await prisma.$transaction(
     async (tx) => {
-      await accountingLock(tx, u.id);
-      await ready(tx, u.id);
+      await accountingLock(tx, ws.ownerId);
+      await ready(tx, ws.ownerId);
       const rule = await tx.recurringInvoice.findFirst({
-        where: { id: v.id, userId: u.id },
+        where: { id: v.id, userId: ws.ownerId },
       });
       if (!rule) throw new Error("定期請求が見つかりません。");
       const key = `recurring:${rule.id}:${v.month}`;
@@ -462,11 +485,12 @@ export async function generateRecurringInvoice(raw: unknown) {
         dueDate: due,
         status: "DRAFT",
       });
-      const created = await createDraft(tx, u.id, input, snap.taxRate, key);
+      const created = await createDraft(tx, ws.ownerId, input, snap.taxRate, key);
       await tx.recurringInvoice.update({
         where: { id: rule.id },
         data: { nextMonth: dateText(new Date(Date.UTC(y, m, 1))).slice(0, 7) },
       });
+      await recordAudit(tx, ws, { action: "RECURRING_GENERATE", entity: "INVOICE", entityId: created.id, summary: `定期請求から下書きを生成（${rule.name.slice(0, 60)}）` });
       return created;
     },
     { timeout: 20000 },

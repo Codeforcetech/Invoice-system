@@ -1,6 +1,7 @@
 import { getSettings } from "@/actions/settings-actions";
 import { SettingsForm } from "@/app/(app)/settings/_components/settings-form";
 import { Card, CardSection } from "@/components/ui/card";
+import { AppButtonLink } from "@/components/ui/app-button";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 
@@ -13,6 +14,11 @@ export default async function SettingsPage() {
         variant="page"
         title="自社情報・設定"
         description="請求書に表示される自社情報・振込先・税率を管理します。"
+        action={
+          <AppButtonLink href="/settings/members" variant="secondary">
+            メンバー・権限
+          </AppButtonLink>
+        }
       />
 
       <Card>

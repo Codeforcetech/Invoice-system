@@ -1,4 +1,5 @@
 import { getSession } from "@/lib/auth/session";
+import { resolveWorkspace } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +21,9 @@ export async function GET(
   const { expenseId } = await context.params;
   if (!/^[a-zA-Z0-9-]{1,100}$/.test(expenseId))
     return new Response(null, { status: 404, headers });
+  const ws = await resolveWorkspace(prisma, session.sub);
   const attachment = await prisma.expenseAttachment.findFirst({
-    where: { expenseId, expense: { userId: session.sub } },
+    where: { expenseId, expense: { userId: ws.ownerId } },
     select: { data: true, filename: true },
   });
   if (!attachment)

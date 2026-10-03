@@ -7,7 +7,10 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/require-user", () => ({ requireUser: m.requireUser }));
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { invoice: { findFirst: m.find } },
+  prisma: {
+    invoice: { findFirst: m.find },
+    workspaceMember: { findUnique: async () => null },
+  },
 }));
 vi.mock("@/lib/settings/system-setting", () => ({
   getOrCreateSystemSetting: m.settings,

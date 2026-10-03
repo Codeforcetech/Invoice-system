@@ -10,6 +10,7 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 import { prisma } from "@/lib/db/prisma";
+import { purgeAudit } from "./audit-cleanup";
 import { initializeAccounting } from "@/actions/accounting-actions";
 import {
   setupClaimWorkspace,
@@ -38,6 +39,7 @@ async function cleanup() {
   await prisma.expenseClaim.deleteMany({ where: { ownerId: owner } });
   await prisma.claimWorkspace.deleteMany({ where: { ownerId: owner } });
   await prisma.journalEntry.deleteMany({ where: { userId: { in: users } } });
+  await purgeAudit(users);
   await prisma.user.deleteMany({ where: { id: { in: users } } });
 }
 function form(
@@ -381,6 +383,17 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
           })
         ).ok,
       ).toBe(false);
+    });
+    it("writes the workflow to the workspace audit log with the acting user", async () => {
+      const logs = await prisma.auditLog.findMany({
+        where: { ownerId: owner, entity: "CLAIM" },
+      });
+      const actions = new Set(logs.map((l) => l.action));
+      expect(actions.has("CLAIM_SUBMIT")).toBe(true);
+      expect(actions.has("CLAIM_APPROVE")).toBe(true);
+      expect(logs.some((l) => l.actorId === reviewer)).toBe(true);
+      // Every claim-workflow event also exists in the per-claim history.
+      expect(logs.length).toBeGreaterThan(0);
     });
   },
 );

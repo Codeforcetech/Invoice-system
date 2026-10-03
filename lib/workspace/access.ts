@@ -1,0 +1,67 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+type Db = PrismaClient | Prisma.TransactionClient;
+
+// Ordered from least to most privileged.
+export const WORKSPACE_ROLES = ["VIEWER", "EDITOR", "APPROVER", "ADMIN"] as const;
+export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
+
+export const roleLabel: Record<WorkspaceRole, string> = {
+  VIEWER: "閲覧のみ",
+  EDITOR: "入力可",
+  APPROVER: "承認可",
+  ADMIN: "管理者",
+};
+
+export const roleSummary: Record<WorkspaceRole, string> = {
+  VIEWER: "帳簿・請求書・レポートを見ることだけができます。",
+  EDITOR: "請求書・仕訳・経費・明細取込を入力できます。",
+  APPROVER: "入力に加えて、経費精算などの承認と、仕訳・入金の取消ができます。",
+  ADMIN: "すべての操作に加えて、勘定科目・固定資産・自社情報・メンバー・操作ログを管理できます。",
+};
+
+export class PermissionError extends Error {
+  constructor(message = "この操作を行う権限がありません。") {
+    super(message);
+    this.name = "PermissionError";
+  }
+}
+
+export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
+  return typeof value === "string" && (WORKSPACE_ROLES as readonly string[]).includes(value);
+}
+
+export function hasRole(role: WorkspaceRole, minimum: WorkspaceRole) {
+  return WORKSPACE_ROLES.indexOf(role) >= WORKSPACE_ROLES.indexOf(minimum);
+}
+
+export type WorkspaceContext = {
+  /** Owner's user id. Every ownership column in the accounting data points here. */
+  ownerId: string;
+  /** The acting user. */
+  userId: string;
+  role: WorkspaceRole;
+  isOwner: boolean;
+};
+
+/**
+ * Resolve which workspace a user acts in. An active membership wins; otherwise
+ * the user works in their own workspace as its administrator. Deactivated members
+ * never fall back to the workspace they were removed from.
+ */
+export async function resolveWorkspace(db: Db, userId: string): Promise<WorkspaceContext> {
+  const member = await db.workspaceMember.findUnique({ where: { userId } });
+  if (member?.active && isWorkspaceRole(member.role)) {
+    return { ownerId: member.ownerId, userId, role: member.role, isOwner: false };
+  }
+  return { ownerId: userId, userId, role: "ADMIN", isOwner: true };
+}
+
+export function assertRole(ctx: WorkspaceContext, minimum: WorkspaceRole) {
+  if (!hasRole(ctx.role, minimum)) {
+    throw new PermissionError(
+      `この操作には「${roleLabel[minimum]}」以上の権限が必要です。現在の権限は「${roleLabel[ctx.role]}」です。`,
+    );
+  }
+  return ctx;
+}

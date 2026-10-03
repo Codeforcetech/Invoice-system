@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ user: vi.fn(), findMany: vi.fn() }));
 vi.mock("@/lib/auth/require-user", () => ({ requireUser: mock.user }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { invoice: { findMany: mock.findMany } } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { invoice: { findMany: mock.findMany }, workspaceMember: { findUnique: async () => null } } }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { listInvoices } from "@/actions/invoice-actions";
 afterEach(() => vi.clearAllMocks());

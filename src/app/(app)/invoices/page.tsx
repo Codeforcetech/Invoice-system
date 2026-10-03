@@ -1,6 +1,7 @@
 import { invoiceDateFilter } from "@/lib/dashboard/sales";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import {
   listInvoices,
   type InvoiceListFilters,
@@ -20,7 +21,7 @@ function toStr(v: string | string[] | undefined) {
 export default async function InvoicesPage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("VIEWER");
   const sp = (await props.searchParams) ?? {};
 
   let fromMonth = toStr(sp.fromMonth),
@@ -42,7 +43,7 @@ export default async function InvoicesPage(props: {
   if (["PAID", "UNPAID", "OVERDUE"].includes(receipt ?? "")) status = "ISSUED";
   const [companies, rows] = await Promise.all([
     prisma.company.findMany({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true },
     }),
@@ -66,7 +67,9 @@ export default async function InvoicesPage(props: {
         title="請求書一覧"
         description="最近更新した順に表示します。番号・会社名・件名から検索できます。"
         action={
-          <AppButtonLink href="/invoices/new">＋ 請求書を作成</AppButtonLink>
+          hasRole(ws.role, "EDITOR") ? (
+            <AppButtonLink href="/invoices/new">＋ 請求書を作成</AppButtonLink>
+          ) : undefined
         }
       />
 

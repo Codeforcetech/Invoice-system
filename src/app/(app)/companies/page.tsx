@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { listCompanies } from "@/actions/company-actions";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
 import {
@@ -24,6 +26,7 @@ export default async function CompaniesPage(props: {
   const sp = (await props.searchParams) ?? {};
   const q = toStr(sp.q);
 
+  const ws = await requireWorkspacePage("VIEWER");
   const companies = await listCompanies({ q: q || undefined });
 
   return (
@@ -33,7 +36,9 @@ export default async function CompaniesPage(props: {
         title="取引先"
         description="請求先の情報・送付先メール・支払条件をまとめて管理します。"
         action={
-          <AppButtonLink href="/companies/new">＋ 取引先を追加</AppButtonLink>
+          hasRole(ws.role, "EDITOR") ? (
+            <AppButtonLink href="/companies/new">＋ 取引先を追加</AppButtonLink>
+          ) : undefined
         }
       />
 

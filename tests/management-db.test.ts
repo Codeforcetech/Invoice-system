@@ -5,6 +5,7 @@ vi.mock("@/lib/auth/require-user", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { prisma } from "@/lib/db/prisma";
+import { purgeAudit } from "./audit-cleanup";
 import { initializeAccounting } from "@/actions/accounting-actions";
 import { saveReportAnnotation } from "@/actions/management-actions";
 import { postJournal, reverseJournal } from "@/lib/accounting/service";
@@ -25,6 +26,7 @@ async function cleanup() {
     await prisma.journalEntry.deleteMany({ where: { userId } });
     await prisma.invoice.deleteMany({ where: { createdById: userId } });
     await prisma.expense.deleteMany({ where: { userId } });
+    await purgeAudit([userId]);
     await prisma.user.deleteMany({ where: { id: userId } });
   }
 }

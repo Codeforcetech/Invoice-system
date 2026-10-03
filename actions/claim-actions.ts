@@ -12,7 +12,8 @@ import {
 } from "@/lib/accounting/service";
 import { dateText, daySchema } from "@/lib/accounting/model";
 import { japanToday } from "@/lib/expenses/model";
-import { claimSchema } from "@/lib/claims/model";
+import { claimActions, claimSchema } from "@/lib/claims/model";
+import { recordAudit } from "@/lib/workspace/audit";
 import { readClaimReceipt } from "@/lib/claims/receipt";
 import { claimPermission } from "@/lib/claims/access";
 import {
@@ -393,6 +394,16 @@ export async function processClaim(raw: unknown) {
             comment: v.comment,
           },
         });
+        await recordAudit(
+          tx,
+          { ownerId: c.ownerId, userId: u.id },
+          {
+            action: `CLAIM_${v.action}`,
+            entity: "CLAIM",
+            entityId: c.id,
+            summary: `経費申請「${c.title.slice(0, 60)}」を${claimActions[v.action] ?? v.action}${v.comment ? `（${v.comment.slice(0, 100)}）` : ""}`,
+          },
+        );
         return recipients.length
           ? notifyUsers(tx, recipients, event.id, title, `/claims/${c.id}`)
           : [];

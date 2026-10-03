@@ -1,4 +1,6 @@
 import { getSession } from "@/lib/auth/session";
+import { resolveWorkspace } from "@/lib/workspace/access";
+import { recordAudit } from "@/lib/workspace/audit";
 import { prisma } from "@/lib/db/prisma";
 import { accountingReport, reportSchema } from "@/lib/accounting/reports";
 import { csv } from "@/lib/accounting/model";
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
     }))
   )
     return new Response("Unauthorized", { status: 401, headers });
+  const ws = await resolveWorkspace(prisma, session.sub);
   const sp = new URL(request.url).searchParams;
   const parsed = reportSchema.safeParse(Object.fromEntries(sp));
   const format = sp.get("format");
@@ -35,7 +38,7 @@ export async function GET(request: Request) {
     });
   active++;
   try {
-    const r = await accountingReport(session.sub, parsed.data);
+    const r = await accountingReport(ws.ownerId, parsed.data);
     if (format === "pdf" && r.rows.length > 1000)
       return new Response("PDFは1,000行までです。期間を短くしてください。", {
         status: 422,
@@ -52,6 +55,11 @@ export async function GET(request: Request) {
               r.rows,
             ),
           );
+    await recordAudit(prisma, ws, {
+      action: "EXPORT_" + format!.toUpperCase(),
+      entity: "EXPORT",
+      summary: `${r.title}（${r.f.from}〜${r.f.to}）を${format!.toUpperCase()}で出力`,
+    });
     return new Response(body, {
       headers: {
         ...headers,

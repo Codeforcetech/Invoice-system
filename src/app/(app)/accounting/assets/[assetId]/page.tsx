@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { prisma } from "@/lib/db/prisma";
 import { dateText, yen } from "@/lib/accounting/model";
 import { japanToday } from "@/lib/expenses/model";
@@ -27,11 +27,11 @@ export default async function AssetDetailPage({
   params: Promise<{ assetId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(),
+  const ws = await requireWorkspacePage("VIEWER"),
     { assetId } = await params,
     sp = await searchParams;
   const asset = await prisma.fixedAsset.findFirst({
-    where: { id: assetId, userId: user.id },
+    where: { id: assetId, userId: ws.ownerId },
     include: {
       assetAccount: true,
       expenseAccount: true,
@@ -68,7 +68,7 @@ export default async function AssetDetailPage({
     const [accounts, setting] = await Promise.all([
       prisma.account.findMany({
         where: {
-          userId: user.id,
+          userId: ws.ownerId,
           OR: [
             { active: true },
             { id: { in: [asset.assetAccountId, asset.expenseAccountId] } },
@@ -77,7 +77,7 @@ export default async function AssetDetailPage({
         orderBy: { code: "asc" },
       }),
       prisma.accountingSetting.findUniqueOrThrow({
-        where: { userId: user.id },
+        where: { userId: ws.ownerId },
       }),
     ]);
     return (

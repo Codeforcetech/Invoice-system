@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { redirect } from "next/navigation";
 import { dateText, invoiceDateText } from "@/lib/accounting/model";
 import { PageShell } from "@/components/ui/page-shell";
@@ -12,9 +12,9 @@ export default async function LinkingPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("VIEWER");
   const setting = await prisma.accountingSetting.findUnique({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
   });
   if (!setting) redirect("/accounting");
   const sp = await searchParams;
@@ -22,7 +22,7 @@ export default async function LinkingPage({
   const [invoices, expenses, sources, matches, rules] = await Promise.all([
     prisma.invoice.findMany({
       where: {
-        createdById: user.id,
+        createdById: ws.ownerId,
         mergedIntoId: null,
         ...(q
           ? {
@@ -46,7 +46,7 @@ export default async function LinkingPage({
     }),
     prisma.expense.findMany({
       where: {
-        userId: user.id,
+        userId: ws.ownerId,
         ...(q
           ? {
               OR: [
@@ -60,16 +60,16 @@ export default async function LinkingPage({
       take: 501,
     }),
     prisma.accountingSource.findMany({
-      where: { userId: user.id, entryId: { not: null } },
+      where: { userId: ws.ownerId, entryId: { not: null } },
       select: { key: true },
     }),
     prisma.receiptMatch.findMany({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
     prisma.recurringInvoice.findMany({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       orderBy: { createdAt: "desc" },
     }),
   ]);

@@ -3,6 +3,7 @@ import path from "node:path";
 export default defineConfig({
   resolve: {
     alias: [
+      { find: "server-only", replacement: path.resolve("tests/stubs/server-only.ts") },
       { find: "@/lib/ui", replacement: path.resolve("src/lib/ui") },
       { find: "@/lib", replacement: path.resolve("lib") },
       { find: "@/actions", replacement: path.resolve("actions") },

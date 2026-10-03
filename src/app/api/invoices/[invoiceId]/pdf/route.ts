@@ -1,4 +1,5 @@
 import { getSession } from "@/lib/auth/session";
+import { resolveWorkspace } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 import { renderInvoicePdf } from "@/lib/pdf/render-invoice";
 import { invoicePdfFilename, MAX_PDF_BYTES } from "@/lib/gmail/mime";
@@ -30,13 +31,14 @@ export async function GET(
     select: { id: true },
   });
   if (!user) return error("ログインし直してください。", 401);
+  const ws = await resolveWorkspace(prisma, user.id);
   const invoice = await prisma.invoice.findFirst({
-    where: { id: invoiceId, createdById: user.id },
+    where: { id: invoiceId, createdById: ws.ownerId },
     include: { company: true, items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!invoice) return error("請求書が見つかりません。", 404);
   const settings = await prisma.systemSetting.findUnique({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
   });
   if (!settings) return error("先に発行元の設定を保存してください。", 422);
   const version = new URL(request.url).searchParams.get("version");

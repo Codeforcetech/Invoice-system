@@ -1,4 +1,6 @@
 import { getSession } from "@/lib/auth/session";
+import { hasRole, resolveWorkspace } from "@/lib/workspace/access";
+import { recordAudit } from "@/lib/workspace/audit";
 import { prisma } from "@/lib/db/prisma";
 import { csv } from "@/lib/accounting/model";
 import { filterSchema } from "@/lib/management/model";
@@ -25,6 +27,7 @@ export async function GET(request: Request) {
     }))
   )
     return new Response("Unauthorized", { status: 401, headers });
+  const ws = await resolveWorkspace(prisma, session.sub);
   const sp = new URL(request.url).searchParams,
     format = sp.get("format"),
     parsed = filterSchema.safeParse(Object.fromEntries(sp));
@@ -38,6 +41,11 @@ export async function GET(request: Request) {
       status: 400,
       headers,
     });
+  if (format === "transfer" && !hasRole(ws.role, "APPROVER"))
+    return new Response("振込データの出力には「承認可」以上の権限が必要です。", {
+      status: 403,
+      headers,
+    });
   if (active >= 2)
     return new Response("出力中です。時間をおいて再試行してください。", {
       status: 429,
@@ -45,7 +53,7 @@ export async function GET(request: Request) {
     });
   active++;
   try {
-    const r = await managementReport(session.sub, parsed.data),
+    const r = await managementReport(ws.ownerId, parsed.data),
       t = reportTable(r);
     if (format === "pdf" && t.rows.length > 1000)
       return new Response("PDFは1,000行までです。期間を短くしてください。", {
@@ -70,6 +78,11 @@ export async function GET(request: Request) {
                 { note: t.note, widths },
               ),
             );
+    await recordAudit(prisma, ws, {
+      action: "EXPORT_" + format!.toUpperCase(),
+      entity: "EXPORT",
+      summary: `${t.title}（${r.f.from}〜${r.f.to}）を${format === "transfer" ? "振込準備CSV" : format!.toUpperCase()}で出力`,
+    });
     return new Response(body, {
       headers: {
         ...headers,

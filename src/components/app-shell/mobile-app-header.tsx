@@ -8,10 +8,14 @@ import { navigation, SidebarContent } from "./app-sidebar";
 export function MobileAppHeader({
   email = "",
   showAdmin = false,
+  canEdit = true,
+  memberRole,
   unreadNotifications = 0,
 }: {
   email?: string;
   showAdmin?: boolean;
+  canEdit?: boolean;
+  memberRole?: string;
   unreadNotifications?: number;
 }) {
   const pathname = usePathname();
@@ -99,6 +103,8 @@ export function MobileAppHeader({
         <SidebarContent
           email={email}
           showAdmin={showAdmin}
+          canEdit={canEdit}
+          memberRole={memberRole}
           onNavigate={() => setOpen(false)}
         />
       </dialog>

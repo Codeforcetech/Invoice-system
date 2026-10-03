@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { prisma } from "@/lib/db/prisma";
 import { dateText } from "@/lib/accounting/model";
 import { japanToday } from "@/lib/expenses/model";
@@ -12,11 +12,11 @@ import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { AppButtonLink } from "@/components/ui/app-button";
 export default async function NewAssetPage() {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("ADMIN");
   const [setting, accounts] = await Promise.all([
-    prisma.accountingSetting.findUnique({ where: { userId: user.id } }),
+    prisma.accountingSetting.findUnique({ where: { userId: ws.ownerId } }),
     prisma.account.findMany({
-      where: { userId: user.id, active: true },
+      where: { userId: ws.ownerId, active: true },
       orderBy: { code: "asc" },
     }),
   ]);

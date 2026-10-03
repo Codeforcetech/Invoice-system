@@ -1,18 +1,18 @@
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { JournalForm } from "@/components/accounting/journal-form";
 import { dateText } from "@/lib/accounting/model";
 export default async function NewTransaction() {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("EDITOR");
   const setting = await prisma.accountingSetting.findUnique({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
   });
   if (!setting) redirect("/accounting");
   const accounts = await prisma.account.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     orderBy: { code: "asc" },
   });
   return (

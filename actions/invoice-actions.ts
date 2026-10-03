@@ -8,7 +8,8 @@ import { InvoiceStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
 import {
   invoiceUpsertSchema,
   type InvoiceUpsertInput,
@@ -85,10 +86,10 @@ export type InvoiceListFilters = {
 };
 
 export async function listInvoices(filters: InvoiceListFilters = {}) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
 
   const where: Prisma.InvoiceWhereInput = {
-    createdById: user.id,
+    createdById: ws.ownerId,
     mergedIntoId: null,
   };
 
@@ -144,10 +145,10 @@ export async function listInvoices(filters: InvoiceListFilters = {}) {
 export type InvoiceWithItems = Prisma.PromiseReturnType<typeof getInvoice>;
 
 export async function getInvoice(params: { invoiceId: string }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
 
   const invoice = await prisma.invoice.findFirst({
-    where: { id: params.invoiceId, createdById: user.id },
+    where: { id: params.invoiceId, createdById: ws.ownerId },
     select: {
       id: true,
       invoiceNumber: true,
@@ -200,22 +201,22 @@ export async function getInvoice(params: { invoiceId: string }) {
 }
 
 export async function getSystemSetting() {
-  const user = await requireUser();
-  return getOrCreateSystemSetting(user.id);
+  const ws = await requireWorkspace("VIEWER");
+  return getOrCreateSystemSetting(ws.ownerId);
 }
 
 export async function createInvoice(raw: unknown) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = invoiceUpsertSchema.parse(raw) satisfies InvoiceUpsertInput;
 
-  const settings = await getOrCreateSystemSetting(user.id);
+  const settings = await getOrCreateSystemSetting(ws.ownerId);
   const taxRateBps = settings.taxRate;
 
   try {
     return await prisma.$transaction(async (tx) => {
-      await accountingLock(tx,user.id);
+      await accountingLock(tx,ws.ownerId);
       const company = await tx.company.findFirst({
-        where: { id: input.companyId, userId: user.id },
+        where: { id: input.companyId, userId: ws.ownerId },
         select: { id: true },
       });
       if (!company) throw new Error("FORBIDDEN_COMPANY");
@@ -231,7 +232,7 @@ export async function createInvoice(raw: unknown) {
         prisma: tx,
         companyId: input.companyId,
         issueDate: input.issueDate,
-        currentUserId: user.id,
+        currentUserId: ws.ownerId,
       });
 
       const now = new Date();
@@ -251,7 +252,7 @@ export async function createInvoice(raw: unknown) {
           grandTotal: calc.grandTotal,
           status: input.status as InvoiceStatus,
           shareToken: generateShareToken(),
-          createdById: user.id,
+          createdById: ws.ownerId,
           autosaveUpdatedAt: now,
           items: {
             create: normalizedItems.map((it, idx) => ({
@@ -263,7 +264,13 @@ export async function createInvoice(raw: unknown) {
         select: { id: true, invoiceNumber: true },
       });
 
-      await syncInvoice(tx,user.id,created.id);
+      await syncInvoice(tx,ws.ownerId,created.id);
+      await recordAudit(tx, ws, {
+        action: "INVOICE_CREATE",
+        entity: "INVOICE",
+        entityId: created.id,
+        summary: `請求書 ${created.invoiceNumber} を作成（${input.status}）`,
+      });
       revalidatePath("/accounting", "layout");
       revalidatePath("/invoices");
       revalidatePath(`/companies/${input.companyId}`);
@@ -282,18 +289,18 @@ export async function updateInvoice(params: {
   invoiceId: string;
   data: unknown;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = invoiceUpsertSchema.parse(
     params.data,
   ) satisfies InvoiceUpsertInput;
 
-  const settings = await getOrCreateSystemSetting(user.id);
+  const settings = await getOrCreateSystemSetting(ws.ownerId);
   const taxRateBps = settings.taxRate;
 
   return prisma.$transaction(async (tx) => {
-      await accountingLock(tx,user.id);
+      await accountingLock(tx,ws.ownerId);
     const invoice = await tx.invoice.findFirst({
-      where: { id: params.invoiceId, createdById: user.id },
+      where: { id: params.invoiceId, createdById: ws.ownerId },
       select: {
         id: true,
         companyId: true,
@@ -310,7 +317,7 @@ export async function updateInvoice(params: {
       );
 
     const company = await tx.company.findFirst({
-      where: { id: input.companyId, userId: user.id },
+      where: { id: input.companyId, userId: ws.ownerId },
       select: { id: true },
     });
     if (!company) throw new Error("FORBIDDEN_COMPANY");
@@ -326,7 +333,7 @@ export async function updateInvoice(params: {
 
     const now = new Date();
     await tx.invoice.update({
-      where: { id: invoice.id, createdById: user.id, receivedDate: null },
+      where: { id: invoice.id, createdById: ws.ownerId, receivedDate: null },
       data: {
         companyId: input.companyId,
         subject: input.subject,
@@ -351,7 +358,13 @@ export async function updateInvoice(params: {
       select: { id: true },
     });
 
-    await syncInvoice(tx,user.id,invoice.id);
+    await syncInvoice(tx,ws.ownerId,invoice.id);
+    await recordAudit(tx, ws, {
+      action: "INVOICE_UPDATE",
+      entity: "INVOICE",
+      entityId: invoice.id,
+      summary: `請求書 ${invoice.invoiceNumber} を更新（${input.status}）`,
+    });
     revalidatePath("/accounting", "layout");
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${invoice.id}`);
@@ -406,16 +419,16 @@ export async function saveInvoiceAutosave(params: {
 export async function duplicateInvoice(params: {
   invoiceId: string;
 }): Promise<{ id: string }> {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
 
-  const settings = await getOrCreateSystemSetting(user.id);
+  const settings = await getOrCreateSystemSetting(ws.ownerId);
   const taxRateBps = settings.taxRate;
 
   try {
     return await prisma.$transaction(async (tx) => {
-      await accountingLock(tx,user.id);
+      await accountingLock(tx,ws.ownerId);
       const src = await tx.invoice.findFirst({
-        where: { id: params.invoiceId, createdById: user.id },
+        where: { id: params.invoiceId, createdById: ws.ownerId },
         include: { items: { orderBy: { sortOrder: "asc" } } },
       });
       if (!src) throw new Error("FORBIDDEN_INVOICE");
@@ -431,7 +444,7 @@ export async function duplicateInvoice(params: {
         prisma: tx,
         companyId: src.companyId,
         issueDate: today,
-        currentUserId: user.id,
+        currentUserId: ws.ownerId,
       });
 
       const normalizedItems = src.items.map((it) => ({
@@ -472,7 +485,7 @@ export async function duplicateInvoice(params: {
           grandTotal: calc.grandTotal,
           status: InvoiceStatus.DRAFT,
           shareToken: generateShareToken(),
-          createdById: user.id,
+          createdById: ws.ownerId,
           autosaveUpdatedAt: now,
           items: {
             create: normalizedItems.map((it, idx) => ({
@@ -482,6 +495,12 @@ export async function duplicateInvoice(params: {
           },
         },
         select: { id: true },
+      });
+      await recordAudit(tx, ws, {
+        action: "INVOICE_DUPLICATE",
+        entity: "INVOICE",
+        entityId: created.id,
+        summary: "請求書を複製して下書きを作成",
       });
 
       revalidatePath("/invoices");

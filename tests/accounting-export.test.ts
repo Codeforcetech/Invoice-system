@@ -2,12 +2,17 @@ import { it, expect, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   user: vi.fn(),
+  audit: vi.fn(),
   report: vi.fn(),
   pdf: vi.fn(),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: mocks.session }));
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: { findUnique: mocks.user } },
+  prisma: {
+    user: { findUnique: mocks.user },
+    workspaceMember: { findUnique: async () => null },
+    auditLog: { create: mocks.audit },
+  },
 }));
 vi.mock("@/lib/accounting/reports", async (original) => ({
   ...(await original()),

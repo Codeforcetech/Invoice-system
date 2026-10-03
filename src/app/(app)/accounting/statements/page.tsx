@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { dateText } from "@/lib/accounting/model";
 import { suggestions } from "@/lib/accounting/statements";
 import { PageShell } from "@/components/ui/page-shell";
@@ -17,19 +17,19 @@ export default async function StatementsPage({
     tab?: string;
   }>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("VIEWER");
   if (
-    !(await prisma.accountingSetting.findUnique({ where: { userId: user.id } }))
+    !(await prisma.accountingSetting.findUnique({ where: { userId: ws.ownerId } }))
   )
     redirect("/accounting");
   const sp = await searchParams;
   const [feeds, accounts] = await Promise.all([
     prisma.statementFeed.findMany({
-      where: { userId: user.id },
+      where: { userId: ws.ownerId },
       orderBy: { createdAt: "asc" },
     }),
     prisma.account.findMany({
-      where: { userId: user.id, active: true },
+      where: { userId: ws.ownerId, active: true },
       orderBy: { code: "asc" },
     }),
   ]);
@@ -46,7 +46,7 @@ export default async function StatementsPage({
     ? await Promise.all([
         prisma.statementRow.findMany({
           where: {
-            userId: user.id,
+            userId: ws.ownerId,
             feedId: feed.id,
             ...(status === "ALL" ? {} : { status }),
           },
@@ -55,16 +55,16 @@ export default async function StatementsPage({
           skip: (page - 1) * 200,
         }),
         prisma.statementRule.findMany({
-          where: { userId: user.id, feedId: feed.id },
+          where: { userId: ws.ownerId, feedId: feed.id },
           include: { counterAccount: true },
           orderBy: { updatedAt: "desc" },
         }),
         prisma.statementRow.groupBy({
           by: ["status"],
-          where: { userId: user.id, feedId: feed.id },
+          where: { userId: ws.ownerId, feedId: feed.id },
           _count: true,
         }),
-        suggestions(prisma, user.id, feed),
+        suggestions(prisma, ws.ownerId, feed),
       ])
     : [[], [], [], null];
   const linkedIds = rows
@@ -73,7 +73,7 @@ export default async function StatementsPage({
     .filter(Boolean);
   const reversed = linkedIds.length
     ? await prisma.journalEntry.findMany({
-        where: { userId: user.id, reversalOf: { in: linkedIds } },
+        where: { userId: ws.ownerId, reversalOf: { in: linkedIds } },
         select: { reversalOf: true },
       })
     : [];

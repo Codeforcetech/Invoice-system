@@ -2,7 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ session: vi.fn(), pdf: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({ getSession: mock.session }));
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { expenseAttachment: { findFirst: mock.pdf } },
+  prisma: {
+    expenseAttachment: { findFirst: mock.pdf },
+    workspaceMember: { findUnique: async () => null },
+  },
 }));
 import { GET } from "@/app/api/expenses/[expenseId]/pdf/route";
 const run = (expenseId = "11111111-1111-4111-8111-111111111111") =>

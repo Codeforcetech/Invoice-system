@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { InvoiceReceipt } from "@/components/invoices/invoice-receipt";
 import { InvoiceDetailToolbar } from "@/app/(app)/invoices/_components/invoice-detail-toolbar";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { getInvoice, type InvoiceWithItems } from "@/actions/invoice-actions";
 import { listCompaniesForInvoiceForm } from "@/actions/company-actions";
@@ -15,7 +15,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 export default async function EditInvoicePage(props: {
   params: Promise<{ invoiceId: string }>;
 }) {
-  const user = await requireUser();
+  const ws = await requireWorkspacePage("EDITOR");
   const { invoiceId } = await props.params;
 
   const [invoice, companies, itemRows, mailRows, settings] = await Promise.all([
@@ -23,7 +23,7 @@ export default async function EditInvoicePage(props: {
     listCompaniesForInvoiceForm(),
     listItemTemplates(),
     listMailTemplates(),
-    getOrCreateSystemSetting(user.id),
+    getOrCreateSystemSetting(ws.ownerId),
   ]);
 
   const itemTemplates = itemRows.map((t) => ({

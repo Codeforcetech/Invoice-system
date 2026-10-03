@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { hasRole } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
 import { dateText, yen } from "@/lib/accounting/model";
 import { methods } from "@/lib/assets/model";
@@ -14,16 +15,17 @@ export default async function AssetsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(),
+  const ws = await requireWorkspacePage("VIEWER"),
     sp = await searchParams;
+  const canManage = hasRole(ws.role, "ADMIN");
   const q = typeof sp.q === "string" ? sp.q.slice(0, 120) : "";
   const archived = sp.status === "archived";
   const page = Math.min(100000, Math.max(1, Number(sp.page) || 1)) | 0;
   const setting = await prisma.accountingSetting.findUnique({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
   });
   const where = {
-    userId: user.id,
+    userId: ws.ownerId,
     archived,
     ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
   };
@@ -47,7 +49,7 @@ export default async function AssetsPage({
         title="固定資産"
         description="パソコン・設備・車両などの資産と、毎月の償却を管理します。"
         action={
-          setting ? (
+          setting && canManage ? (
             <AppButtonLink href="/accounting/assets/new">
               ＋ 資産を登録
             </AppButtonLink>
@@ -117,9 +119,11 @@ export default async function AssetsPage({
                   資産の情報を登録 → 償却予定を確認 →
                   仕訳を登録。入力した内容から、月ごとの費用を自動計算します。
                 </p>
-                <AppButtonLink href="/accounting/assets/new" className="mt-5">
-                  資産を登録
-                </AppButtonLink>
+                {canManage && (
+                  <AppButtonLink href="/accounting/assets/new" className="mt-5">
+                    資産を登録
+                  </AppButtonLink>
+                )}
               </CardSection>
             </Card>
           ) : (

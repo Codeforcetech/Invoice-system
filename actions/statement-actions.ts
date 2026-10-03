@@ -1,7 +1,9 @@
 "use server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
+import { PermissionError, type WorkspaceRole } from "@/lib/workspace/access";
 import { revalidatePath } from "next/cache";
 import {
   accountingLock,
@@ -23,13 +25,17 @@ import {
   direction,
 } from "@/lib/accounting/statements";
 
-async function execute<T>(fn: (tx: Tx, userId: string) => Promise<T>) {
-  const user = await requireUser();
+type Ws = Awaited<ReturnType<typeof requireWorkspace>>;
+async function execute<T>(
+  role: WorkspaceRole,
+  fn: (tx: Tx, userId: string, ws: Ws) => Promise<T>,
+) {
   try {
+    const ws = await requireWorkspace(role);
     const data = await prisma.$transaction(
       async (tx) => {
-        await accountingLock(tx, user.id);
-        return fn(tx, user.id);
+        await accountingLock(tx, ws.ownerId);
+        return fn(tx, ws.ownerId, ws);
       },
       { timeout: 30000 },
     );
@@ -39,7 +45,9 @@ async function execute<T>(fn: (tx: Tx, userId: string) => Promise<T>) {
     const error =
       e instanceof z.ZodError
         ? "入力内容を確認してください。"
-        : e instanceof Error && !("code" in e) && !e.message.includes("\n")
+        : e instanceof Error &&
+            (e instanceof PermissionError ||
+              (!("code" in e) && !e.message.includes("\n")))
           ? e.message
           : "保存できませんでした。再読み込みして確認してください。";
     return { ok: false as const, error };
@@ -110,7 +118,7 @@ async function prepare(tx: Tx, userId: string, raw: unknown) {
   return { v, feed, rows };
 }
 export async function createStatementFeed(raw: unknown) {
-  return execute(async (tx, userId) => {
+  return execute("ADMIN", async (tx, userId, ws) => {
     const v = z
       .object({
         name: z.string().trim().min(1).max(80),
@@ -140,17 +148,19 @@ export async function createStatementFeed(raw: unknown) {
         throw new Error("同じ口座名が登録済みです。");
       return old.id;
     }
-    return (await tx.statementFeed.create({ data: { ...v, userId } })).id;
+    const feedRow = await tx.statementFeed.create({ data: { ...v, userId } });
+    await recordAudit(tx, ws, { action: "FEED_CREATE", entity: "STATEMENT", entityId: feedRow.id, summary: `${v.kind === "BANK" ? "銀行口座" : "カード"}「${v.name}」を登録` });
+    return feedRow.id;
   });
 }
 export async function previewStatements(raw: unknown) {
-  return execute(async (tx, userId) => {
+  return execute("EDITOR", async (tx, userId) => {
     const p = await prepare(tx, userId, raw);
     return p.rows;
   });
 }
 export async function importStatements(raw: unknown) {
-  return execute(async (tx, userId) => {
+  return execute("EDITOR", async (tx, userId, ws) => {
     const { v, feed, rows } = await prepare(tx, userId, raw);
     let imported = 0,
       posted = 0;
@@ -181,6 +191,12 @@ export async function importStatements(raw: unknown) {
         posted++;
       }
     }
+    await recordAudit(tx, ws, {
+      action: "STATEMENT_IMPORT",
+      entity: "STATEMENT",
+      entityId: feed.id,
+      summary: `明細を取込（${v.fileName.slice(0, 80)}）${imported}件、自動登録${posted}件`,
+    });
     return { imported, posted, duplicates: rows.length - imported };
   });
 }
@@ -189,7 +205,7 @@ const rowSchema = z.object({
   version: z.string().datetime(),
 });
 export async function decideStatement(raw: unknown) {
-  return execute(async (tx, userId) => {
+  return execute("EDITOR", async (tx, userId, ws) => {
     const v = rowSchema
       .extend({
         action: z.enum(["approve", "ignore", "undo", "link"]),
@@ -198,6 +214,12 @@ export async function decideStatement(raw: unknown) {
         entryId: z.string().optional(),
       })
       .parse(raw);
+    await recordAudit(tx, ws, {
+      action: "STATEMENT_" + v.action.toUpperCase(),
+      entity: "STATEMENT",
+      entityId: v.id,
+      summary: `明細を${{ approve: "承認・仕訳登録", ignore: "対象外に設定", undo: "登録を取消", link: "既存仕訳と照合" }[v.action]}`,
+    });
     const row = await tx.statementRow.findFirst({
       where: { id: v.id, userId },
     });
@@ -316,7 +338,7 @@ export async function decideStatement(raw: unknown) {
   });
 }
 export async function updateStatementRule(raw: unknown) {
-  return execute(async (tx, userId) => {
+  return execute("ADMIN", async (tx, userId, ws) => {
     const v = z
       .object({
         id: z.string().min(1),
@@ -325,6 +347,12 @@ export async function updateStatementRule(raw: unknown) {
         automatic: z.boolean(),
       })
       .parse(raw);
+    await recordAudit(tx, ws, {
+      action: "RULE_UPDATE",
+      entity: "STATEMENT",
+      entityId: v.id,
+      summary: `自動登録ルールを${v.active ? "有効" : "停止"}・自動登録${v.automatic ? "オン" : "オフ"}に設定`,
+    });
     const rule = await tx.statementRule.findFirst({
       where: { id: v.id, userId },
       include: { counterAccount: true },

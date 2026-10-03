@@ -1,20 +1,20 @@
 "use server";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
 import { getOrCreateSystemSetting } from "@/lib/settings/system-setting";
 import { invoicePdfFilename } from "@/lib/gmail/mime";
 import { invoiceDocumentVersion } from "@/lib/pdf/version";
 
 /** Prepare a private, owner-scoped snapshot. No public share token or email is created. */
 export async function getInvoiceMailDefaults(params: { invoiceId: string }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   const invoice = await prisma.invoice.findFirst({
-    where: { id: params.invoiceId, createdById: user.id },
+    where: { id: params.invoiceId, createdById: ws.ownerId },
     include: { company: true },
   });
   if (!invoice) throw new Error("請求書が見つかりません");
-  const settings = await getOrCreateSystemSetting(user.id);
+  const settings = await getOrCreateSystemSetting(ws.ownerId);
   const date = (d: Date) =>
     new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo" }).format(d);
   return {

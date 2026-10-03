@@ -4,7 +4,8 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db/prisma";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspace } from "@/lib/auth/require-workspace";
+import { recordAudit } from "@/lib/workspace/audit";
 import { companyUpsertSchema, type CompanyUpsertInput } from "@/lib/validators/company";
 
 const companyListSelect = {
@@ -28,10 +29,10 @@ const companyFormSelect = {
 } satisfies Prisma.CompanySelect;
 
 export async function listCompanies(params: { q?: string } = {}) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
 
   const where: Prisma.CompanyWhereInput = {
-    userId: user.id,
+    userId: ws.ownerId,
     ...(params.q ? { name: { contains: params.q, mode: "insensitive" } } : {}),
   };
 
@@ -44,9 +45,9 @@ export async function listCompanies(params: { q?: string } = {}) {
 
 /** 請求書フォーム用：自動入力に必要なフィールド込み */
 export async function listCompaniesForInvoiceForm() {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
   return prisma.company.findMany({
-    where: { userId: user.id },
+    where: { userId: ws.ownerId },
     orderBy: { name: "asc" },
     select: companyFormSelect,
   });
@@ -55,10 +56,10 @@ export async function listCompaniesForInvoiceForm() {
 export type CompanyForInvoiceForm = Prisma.CompanyGetPayload<{ select: typeof companyFormSelect }>;
 
 export async function getCompany(params: { companyId: string }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("VIEWER");
 
   const company = await prisma.company.findFirst({
-    where: { id: params.companyId, userId: user.id },
+    where: { id: params.companyId, userId: ws.ownerId },
     select: companyFormSelect,
   });
   if (!company) throw new Error("FORBIDDEN_COMPANY");
@@ -66,12 +67,13 @@ export async function getCompany(params: { companyId: string }) {
 }
 
 export async function createCompany(raw: unknown) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = companyUpsertSchema.parse(raw) satisfies CompanyUpsertInput;
 
-  const created = await prisma.company.create({
+  const created = await prisma.$transaction(async (tx) => {
+    const row = await tx.company.create({
     data: {
-      userId: user.id,
+      userId: ws.ownerId,
       name: input.name,
       invoiceCode: input.invoiceCode,
       defaultDueDays: input.defaultDueDays,
@@ -81,6 +83,9 @@ export async function createCompany(raw: unknown) {
       billingCcEmail: input.billingCcEmail?.trim() || null,
     },
     select: { id: true },
+    });
+    await recordAudit(tx, ws, { action: "COMPANY_CREATE", entity: "SETTING", entityId: row.id, summary: `取引先「${input.name.slice(0, 60)}」を登録` });
+    return row;
   });
 
   revalidatePath("/companies");
@@ -88,16 +93,17 @@ export async function createCompany(raw: unknown) {
 }
 
 export async function updateCompany(params: { companyId: string; data: unknown }) {
-  const user = await requireUser();
+  const ws = await requireWorkspace("EDITOR");
   const input = companyUpsertSchema.parse(params.data) satisfies CompanyUpsertInput;
 
   const exists = await prisma.company.findFirst({
-    where: { id: params.companyId, userId: user.id },
+    where: { id: params.companyId, userId: ws.ownerId },
     select: { id: true },
   });
   if (!exists) throw new Error("FORBIDDEN_COMPANY");
 
-  const updated = await prisma.company.update({
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.company.update({
     where: { id: params.companyId },
     data: {
       name: input.name,
@@ -109,6 +115,9 @@ export async function updateCompany(params: { companyId: string; data: unknown }
       billingCcEmail: input.billingCcEmail?.trim() || null,
     },
     select: { id: true },
+    });
+    await recordAudit(tx, ws, { action: "COMPANY_UPDATE", entity: "SETTING", entityId: row.id, summary: `取引先「${input.name.slice(0, 60)}」を更新` });
+    return row;
   });
 
   revalidatePath("/companies");

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { japanToday } from "@/lib/expenses/model";
 import { filterSchema, reportViews } from "@/lib/management/model";
 import { managementReport } from "@/lib/management/report";
@@ -15,7 +15,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUser(),
+  const ws = await requireWorkspacePage("VIEWER"),
     sp = await searchParams;
   const str = (key: string) =>
     typeof sp[key] === "string" ? (sp[key] as string) : "";
@@ -35,7 +35,7 @@ export default async function ReportsPage({
       ? ""
       : "指定条件が正しくありません。今月・全ての分類を表示しています。";
   try {
-    report = await managementReport(user.id, f);
+    report = await managementReport(ws.ownerId, f);
   } catch (e) {
     error =
       e instanceof Error && !e.message.includes("\n")
