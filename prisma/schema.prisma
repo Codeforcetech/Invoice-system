@@ -632,3 +632,13 @@ model EvidenceHistory {
   @@index([evidenceId, createdAt])
   @@index([ownerId, createdAt])
 }
+
+// Failed sign-in counter per e-mail address (hashed), kept for accounts that do not exist as well,
+// so the response never reveals whether an account exists.
+model LoginThrottle {
+  key           String    @id
+  failures      Int       @default(0)
+  firstFailedAt DateTime  @default(now())
+  lockedUntil   DateTime?
+  updatedAt     DateTime  @updatedAt
+}

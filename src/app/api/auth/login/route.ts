@@ -6,7 +6,12 @@ import {
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
 } from "@/lib/auth/session";
-import { verifyPassword } from "@/lib/auth/password";
+import { dummyPasswordHash, verifyPassword } from "@/lib/auth/password";
+import {
+  clearLoginFailures,
+  lockedSeconds,
+  recordLoginFailure,
+} from "@/lib/auth/throttle";
 import { resolveWorkspace } from "@/lib/workspace/access";
 import { recordAuditSafely } from "@/lib/workspace/audit";
 
@@ -24,28 +29,38 @@ export async function POST(req: Request) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
+  // A locked address is refused before anything else, whether or not the account exists.
+  if (await lockedSeconds(prisma, email)) {
+    return redirectAfterForm(new URL("/login?error=locked", req.url));
+  }
+
   const user = await prisma.user.findUnique({
     where: { email },
     select: { id: true, passwordHash: true, role: true },
   });
-  if (!user) {
-    return redirectAfterForm(new URL("/login?error=invalid", req.url));
-  }
-
+  // Unknown addresses take as long as wrong passwords, so timing does not reveal accounts.
   const ok = await verifyPassword({
     password,
-    passwordHash: user.passwordHash,
+    passwordHash: user?.passwordHash ?? (await dummyPasswordHash()),
   });
-  if (!ok) {
+  if (!user || !ok) {
+    const locked = await recordLoginFailure(prisma, email);
     // Only accounts that exist can be logged; the page never reveals which case failed.
-    const ws = await resolveWorkspace(prisma, user.id);
-    await recordAuditSafely(prisma, ws, {
-      action: "LOGIN_FAILED",
-      entity: "SESSION",
-      summary: "ログインに失敗（パスワード不一致）",
-    });
-    return redirectAfterForm(new URL("/login?error=invalid", req.url));
+    if (user) {
+      const ws = await resolveWorkspace(prisma, user.id);
+      await recordAuditSafely(prisma, ws, {
+        action: locked ? "LOGIN_LOCKED" : "LOGIN_FAILED",
+        entity: "SESSION",
+        summary: locked
+          ? "ログインに連続して失敗したため、15分間ロック"
+          : "ログインに失敗（パスワード不一致）",
+      });
+    }
+    return redirectAfterForm(
+      new URL(locked ? "/login?error=locked" : "/login?error=invalid", req.url),
+    );
   }
+  await clearLoginFailures(prisma, email);
   const ws = await resolveWorkspace(prisma, user.id);
   await recordAuditSafely(prisma, ws, {
     action: "LOGIN",

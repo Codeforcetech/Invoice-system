@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // The sample accounts below use well-known passwords. Never create them in production.
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
+    throw new Error("prisma/seed.ts creates sample accounts with known passwords and must not run in production.");
+  }
   const adminEmail = "admin@example.com";
   const adminPassword = "admin12345";
   const adminPasswordHash = await bcrypt.hash(adminPassword, 12);

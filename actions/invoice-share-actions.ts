@@ -51,8 +51,9 @@ export async function getInvoiceByShareToken(token: string) {
   const normalized = token.trim();
   if (!normalized) return null;
 
+  // Only issued invoices are shown. Drafts and invoices merged into another one are never public.
   return prisma.invoice.findFirst({
-    where: { shareToken: normalized },
+    where: { shareToken: normalized, status: "ISSUED", mergedIntoId: null },
     select: invoiceShareSelect,
   });
 }

@@ -13,6 +13,8 @@ type SessionPayload = {
 function getSecretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is required");
+  if (process.env.NODE_ENV === "production" && secret.length < 32)
+    throw new Error("AUTH_SECRET must be at least 32 characters in production");
   return new TextEncoder().encode(secret);
 }
 

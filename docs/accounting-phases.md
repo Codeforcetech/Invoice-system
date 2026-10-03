@@ -34,7 +34,7 @@
 
 ## 開発環境
 
-`work/accounting-dev/start.cjs` は localhost:8770 で実際の保存ができる独立した開発用DBを使用。従来の8767はサンプル画面。開発用アカウントは `accounting@seiq.example` / `Seiq-Local-2026!`（本番では利用不可）。DBコンテナは `seiq-accounting-dev-0927`。実在のお客様のデータは使用しない。
+`work/accounting-dev/start.cjs` は localhost:8770 で実際の保存ができる独立した開発用DBを使用。従来の8767はサンプル画面。開発用アカウントは `accounting@seiq.example`（パスワードは開発用スクリプト `work/accounting-dev/start.cjs` に記載。リポジトリには含めない）（本番では利用不可）。DBコンテナは `seiq-accounting-dev-0927`。実在のお客様のデータは使用しない。
 
 ## 次の相談ポイント（フェーズ7は第1段階を実装済み。下記は当初の相談メモ）
 
@@ -95,7 +95,7 @@
 - 25ファイル・143テスト成功。経費申請/再申請、自己承認禁止、他者の下書き/添付の非公開、権限停止、同時承認、失敗時ロールバック、精算/取消、画像検証、通知所有者分離、送信リース・冪等再送・再送期限・ジョブ認証を確認。
 - TypeScript・ESLint成功。実画面で別の承認者アカウントへ切替えて、申請→承認依頼通知→承認/仕訳→管理者の精算/仕訳を確認。
 - 実メールは未送信。外部サービス設定は未実施。本番データは変更していない。
-- 確認画面: http://localhost:8770/claims 。ローカル検証承認者は `reviewer@seiq.example` / `Seiq-Review-2026!`。実在の顧客情報を含まない。
+- 確認画面: http://localhost:8770/claims 。ローカル検証承認者は `reviewer@seiq.example`（パスワードは `work/accounting-dev/seed-claims.cjs` に記載）。実在の顧客情報を含まない。
 
 ## フェーズ5: 固定資産台帳・減価償却（2026-09-28）
 

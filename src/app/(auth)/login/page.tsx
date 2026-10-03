@@ -5,7 +5,8 @@ export default async function LoginPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const error = (await searchParams)?.error === "invalid";
+  const reason = (await searchParams)?.error;
+  const error = reason === "invalid" || reason === "locked";
   return (
     <div className="app-workspace grid min-h-screen bg-background lg:grid-cols-2">
       <section className="relative hidden flex-col justify-between overflow-hidden bg-brand-navy p-14 lg:flex">
@@ -49,7 +50,9 @@ export default async function LoginPage({
               role="alert"
               className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
             >
-              メールアドレスまたはパスワードを確認してください。
+              {reason === "locked"
+                ? "ログインに続けて失敗したため、しばらくログインできません。15分ほど待ってから、もう一度お試しください。"
+                : "メールアドレスまたはパスワードを確認してください。"}
             </p>
           )}
           <form
