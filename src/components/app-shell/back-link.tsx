@@ -5,7 +5,7 @@ import { parentLink } from "@/lib/navigation/parent";
 
 /** 下層ページの先頭に出す「← ○○へ戻る」。一覧・ホームのページでは何も出さない。 */
 export function BackLink() {
-  const parent = parentLink(usePathname());
+  const parent = parentLink(usePathname() ?? "");
   if (!parent) return null;
   return (
     <nav aria-label="前のページへ" className="-mb-2">
