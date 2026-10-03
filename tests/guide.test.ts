@@ -87,3 +87,37 @@ describe("usage guide", () => {
     expect(new Set(finder.map((f) => f.want)).size).toBe(finder.length);
   });
 });
+
+describe("usage guide page", () => {
+  it("renders every in-page link's target, and keeps the long sections collapsed behind a title", async () => {
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { default: GuidePage } = await import("../src/app/(app)/guide/page");
+    const html = renderToStaticMarkup(createElement(GuidePage));
+
+    const targets = [...html.matchAll(/href="#([^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((id) => id !== "main-content");
+    expect(targets.length).toBeGreaterThan(8);
+    for (const id of new Set(targets))
+      expect(html.includes(`id="${id}"`), id).toBe(true);
+
+    // The eight major sections and every chapter are expandable items that start closed.
+    const sections = [
+      "overview",
+      "first-steps",
+      "menu",
+      "finder",
+      "chapters",
+      "roles",
+      "glossary",
+      "faq",
+    ];
+    for (const id of [...sections, ...chapters.map((c) => c.id)]) {
+      const tag = html.match(new RegExp(`<details[^>]*id="${id}"[^>]*>`))?.[0];
+      expect(tag, id).toBeTruthy();
+      expect(tag).toContain("data-guide");
+      expect(tag).not.toMatch(/\sopen(=|\s|>)/);
+    }
+  });
+});
