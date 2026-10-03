@@ -48,7 +48,7 @@ export async function DashboardReports({
             </p>
           </div>
           <Link
-            className="text-sm text-emerald-800"
+            className="text-sm text-sky-700"
             href={`/reports?from=${from}&to=${to}`}
           >
             詳しく確認 →
@@ -86,7 +86,7 @@ export async function DashboardReports({
             <Link
               key={view}
               href={`/reports?view=${view}&from=${from}&to=${to}`}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-emerald-800 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-sky-700 hover:bg-slate-50"
             >
               {label} →
             </Link>

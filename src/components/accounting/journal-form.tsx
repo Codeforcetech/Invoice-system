@@ -66,13 +66,13 @@ export function JournalForm({
       <CardSection>
         <div className="flex flex-wrap gap-2">
           <AppButton
-            variant={mode === "voucher" ? "primary" : "secondary"}
+            variant={mode === "voucher" ? "selected" : "secondary"}
             onClick={() => setMode("voucher")}
           >
             振替伝票入力
           </AppButton>
           <AppButton
-            variant={mode === "book" ? "primary" : "secondary"}
+            variant={mode === "book" ? "selected" : "secondary"}
             onClick={() => setMode("book")}
           >
             帳簿形式入力

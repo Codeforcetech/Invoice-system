@@ -150,7 +150,7 @@ export function AccountingLinks(p: Props) {
         ].map(([k, label]) => (
           <AppButton
             key={k}
-            variant={tab === k ? "primary" : "secondary"}
+            variant={tab === k ? "selected" : "secondary"}
             disabled={busy}
             onClick={() => {
               setTab(k);

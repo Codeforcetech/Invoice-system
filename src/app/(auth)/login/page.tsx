@@ -7,11 +7,11 @@ export default async function LoginPage({
 }) {
   const error = (await searchParams)?.error === "invalid";
   return (
-    <div className="app-workspace grid min-h-screen bg-[#f5f7f9] lg:grid-cols-2">
-      <section className="relative hidden flex-col justify-between overflow-hidden bg-[#132b32] p-14 lg:flex">
+    <div className="app-workspace grid min-h-screen bg-background lg:grid-cols-2">
+      <section className="relative hidden flex-col justify-between overflow-hidden bg-brand-navy p-14 lg:flex">
         <BrandLogo light />
         <div className="relative z-10">
-          <p className="mb-6 text-xs tracking-[0.25em] text-emerald-300">
+          <p className="mb-6 text-xs tracking-[0.25em] text-brand-gold">
             CLEAR NUMBERS. CLEAR BUSINESS.
           </p>
           <h1 className="text-4xl font-semibold leading-relaxed tracking-tight text-white">
@@ -87,7 +87,7 @@ export default async function LoginPage({
             </div>
             <button
               type="submit"
-              className="min-h-12 w-full rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700"
+              className="min-h-12 w-full rounded-xl bg-brand-gold px-4 py-3 text-sm font-semibold text-brand-navy hover:bg-brand-gold-hover"
             >
               ログイン →
             </button>

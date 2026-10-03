@@ -276,7 +276,7 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
             </div>
             <button
               disabled={pending}
-              className="min-h-11 rounded-xl bg-[#183d44] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="min-h-11 rounded-xl bg-brand-navy px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
             >
               {pending ? "保存中…" : expense ? "変更を保存" : "支払いを登録"}
             </button>

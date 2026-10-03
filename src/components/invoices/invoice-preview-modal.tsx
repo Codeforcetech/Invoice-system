@@ -22,7 +22,7 @@ function ToolbarAction(props: {
     "inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50";
   const variantClass =
     props.variant === "primary"
-      ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
+      ? "bg-brand-gold text-brand-navy shadow-sm hover:bg-brand-gold-hover"
       : props.variant === "secondary"
         ? "border border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50"
         : "text-slate-600 hover:bg-slate-100 hover:text-slate-900";

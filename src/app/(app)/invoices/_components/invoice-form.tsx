@@ -56,9 +56,9 @@ const inputClass =
 const buttonClass =
   "inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-sky-600 disabled:cursor-not-allowed disabled:opacity-50";
 const primaryClass = buttonClass
-  .replace("border-slate-200 bg-white", "border-sky-600 bg-sky-600")
-  .replace("text-slate-700", "text-white")
-  .replace("hover:bg-slate-50", "hover:bg-sky-700");
+  .replace("border-slate-200 bg-white", "border-brand-gold bg-brand-gold")
+  .replace("text-slate-700", "text-brand-navy")
+  .replace("hover:bg-slate-50", "hover:bg-brand-gold-hover");
 const LAST_UNIT_PRICE_KEY = "invoice_last_unit_price_v1";
 const yen = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 const finite = (n: unknown) => (Number.isFinite(Number(n)) ? Number(n) : 0);

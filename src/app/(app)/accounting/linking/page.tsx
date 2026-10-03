@@ -95,7 +95,7 @@ export default async function LinkingPage({
           placeholder="取引先・件名・請求書番号で検索"
           className={`${inputClass} max-w-md`}
         />
-        <button className="rounded-xl bg-sky-600 px-4 py-2 text-sm text-white">
+        <button className="rounded-xl bg-brand-gold transition-colors hover:bg-brand-gold-hover px-4 py-2 text-sm text-brand-navy">
           検索
         </button>
       </form>

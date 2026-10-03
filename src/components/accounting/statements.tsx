@@ -166,7 +166,7 @@ export function StatementWorkspace(p: Props) {
           <AppButton
             key={value}
             disabled={busy || (!feed && value !== "feeds")}
-            variant={tab === value ? "primary" : "secondary"}
+            variant={tab === value ? "selected" : "secondary"}
             onClick={() => {
               setTab(value as typeof tab);
               setMessage("");
@@ -507,7 +507,7 @@ export function StatementWorkspace(p: Props) {
               <AppButtonLink
                 key={s}
                 href={`/accounting/statements?feed=${feed.id}&status=${s}`}
-                variant={p.status === s ? "primary" : "secondary"}
+                variant={p.status === s ? "selected" : "secondary"}
               >
                 {label}{" "}
                 {s === "ALL"

@@ -207,7 +207,7 @@ export function CompanyForm(props: {
       <div className="flex justify-end border-t border-slate-100 pt-6">
         <button
           type="submit"
-          className="rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+          className="rounded-lg bg-brand-gold px-5 py-2.5 text-sm font-semibold text-brand-navy shadow-sm hover:bg-brand-gold-hover disabled:opacity-60"
           disabled={saving}
         >
           {saving ? "保存中…" : mode === "create" ? "取引先を登録" : "変更を保存"}

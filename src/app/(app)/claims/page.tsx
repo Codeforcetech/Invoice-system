@@ -105,7 +105,7 @@ export default async function ClaimsPage({
             {["ALL", ...Object.keys(claimStatus)].map((s) => (
               <AppButtonLink
                 key={s}
-                variant={status === s ? "primary" : "secondary"}
+                variant={status === s ? "selected" : "secondary"}
                 href={`/claims?owner=${space.ownerId}&status=${s}`}
               >
                 {s === "ALL" ? "すべて" : claimStatus[s]}{" "}

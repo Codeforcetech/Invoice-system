@@ -72,7 +72,7 @@ export default async function ReportsPage({
           <AppButtonLink
             key={key}
             href={`/reports?${new URLSearchParams({ ...f, view: key })}`}
-            variant={f.view === key ? "primary" : "secondary"}
+            variant={f.view === key ? "selected" : "secondary"}
           >
             {label}
           </AppButtonLink>

@@ -89,7 +89,7 @@ export function MobileAppHeader({
         onClick={(e) => {
           if (e.target === e.currentTarget) setOpen(false);
         }}
-        className="m-0 h-dvh max-h-none w-[min(300px,90vw)] max-w-none bg-[#132b32] p-0 text-white backdrop:bg-slate-950/50"
+        className="m-0 h-dvh max-h-none w-[min(300px,90vw)] max-w-none bg-brand-navy p-0 text-white backdrop:bg-slate-950/50"
       >
         <button
           autoFocus

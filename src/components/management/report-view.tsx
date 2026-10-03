@@ -29,7 +29,7 @@ function Bars({ title, rows }: { title: string; rows: AmountRow[] }) {
                   className="h-2 rounded-full bg-slate-100"
                 >
                   <div
-                    className={`h-2 rounded-full ${r.amount < 0 ? "bg-rose-400" : "bg-emerald-700"}`}
+                    className={`h-2 rounded-full ${r.amount < 0 ? "bg-rose-400" : "bg-brand-blue"}`}
                     style={{ width: `${(Math.abs(r.amount) / max) * 100}%` }}
                   />
                 </div>
@@ -233,7 +233,7 @@ export function ReportView({
               </p>
             )}
             <Link
-              className="ml-3 text-sm text-emerald-800"
+              className="ml-3 text-sm text-sky-700"
               href={`/reports?${new URLSearchParams({ ...r.f, view: "tags" })}`}
             >
               分類・振込先を設定 →
@@ -274,7 +274,7 @@ export function ReportView({
                   {(view === "receipts" || view === "payments") && (
                     <td className="p-3">
                       <Link
-                        className="whitespace-nowrap text-emerald-800"
+                        className="whitespace-nowrap text-sky-700"
                         href={due[(safePage - 1) * 100 + i].href}
                       >
                         詳細 →

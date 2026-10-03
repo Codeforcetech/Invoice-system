@@ -62,7 +62,7 @@ export default async function CompaniesPage(props: {
                 クリア
               </AppButtonLink>
               <button
-                className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-gold px-4 py-2 text-sm font-medium text-brand-navy shadow-sm hover:bg-brand-gold-hover"
                 type="submit"
               >
                 検索

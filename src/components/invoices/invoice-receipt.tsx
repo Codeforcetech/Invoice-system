@@ -122,7 +122,7 @@ export function InvoiceReceipt({ invoice }: { invoice: ReceiptInvoice }) {
           </label>
           <button
             disabled={busy}
-            className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-brand-gold transition-colors hover:bg-brand-gold-hover px-4 py-2.5 text-sm font-medium text-brand-navy disabled:opacity-50"
           >
             {busy ? "保存中…" : "全額の入金を記録"}
           </button>

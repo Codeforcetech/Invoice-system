@@ -102,7 +102,7 @@ export function DashboardView({
               {data.costs.month}
             </span>
           </h2>
-          <Link href="/expenses" className="py-2 text-sm text-emerald-800">
+          <Link href="/expenses" className="py-2 text-sm text-sky-700">
             支払管理を開く →
           </Link>
         </div>
@@ -164,7 +164,7 @@ export function DashboardView({
         </Link>
         <Link
           href="/invoices"
-          className="ml-auto px-2 py-3 text-sm text-emerald-800"
+          className="ml-auto px-2 py-3 text-sm text-sky-700"
         >
           すべての請求書 {data.invoiceCount}件 →
         </Link>
@@ -254,7 +254,7 @@ export function DashboardView({
               aria-valuemax={4}
             >
               <div
-                className="h-full rounded-full bg-emerald-500"
+                className="h-full rounded-full bg-brand-blue"
                 style={{ width: `${(complete / 4) * 100}%` }}
               />
             </div>
@@ -263,7 +263,7 @@ export function DashboardView({
                 <li key={s.label}>
                   <Link href={s.href} className="group flex items-start gap-3">
                     <span
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${s.done ? "bg-emerald-100 text-emerald-700" : "border border-slate-300 text-slate-400"}`}
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${s.done ? "bg-sky-100 text-sky-700" : "border border-slate-300 text-slate-400"}`}
                     >
                       {s.done && <AppIcon name="check" className="h-3 w-3" />}
                     </span>
@@ -280,8 +280,8 @@ export function DashboardView({
               ))}
             </ul>
           </section>
-          <section className="rounded-2xl border border-emerald-100 bg-[#edf6f2] p-6">
-            <AppIcon name="items" className="mb-3 text-emerald-700" />
+          <section className="rounded-2xl border border-sky-100 bg-sky-50 p-6">
+            <AppIcon name="items" className="mb-3 text-sky-700" />
             <h2 className="text-sm font-semibold text-slate-800">
               毎回の入力を、もっと少なく。
             </h2>
@@ -290,7 +290,7 @@ export function DashboardView({
             </p>
             <Link
               href="/item-templates"
-              className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-emerald-800"
+              className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-sky-700"
             >
               テンプレートを管理
               <AppIcon name="arrow" className="h-4 w-4" />

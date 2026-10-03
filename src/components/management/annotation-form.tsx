@@ -182,7 +182,7 @@ export function AnnotationForm({
           >
             {pending ? "保存中…" : "分類・振込先を保存"}
           </button>
-          <a href={target.href} className="text-sm text-emerald-800">
+          <a href={target.href} className="text-sm text-sky-700">
             元の取引を確認 →
           </a>
           <p role="status" className="text-sm">

@@ -76,19 +76,19 @@ export default async function InvoicesPage(props: {
       <div className="flex flex-wrap items-center gap-2">
         <AppButtonLink
           href={statusHref("ALL")}
-          variant={status === "ALL" ? "primary" : "secondary"}
+          variant={status === "ALL" ? "selected" : "secondary"}
         >
           すべて
         </AppButtonLink>
         <AppButtonLink
           href={statusHref("DRAFT")}
-          variant={status === "DRAFT" ? "primary" : "secondary"}
+          variant={status === "DRAFT" ? "selected" : "secondary"}
         >
           下書きを再開
         </AppButtonLink>
         <AppButtonLink
           href={statusHref("ISSUED")}
-          variant={status === "ISSUED" ? "primary" : "secondary"}
+          variant={status === "ISSUED" ? "selected" : "secondary"}
         >
           発行済み
         </AppButtonLink>
@@ -215,7 +215,7 @@ export default async function InvoicesPage(props: {
               </AppButtonLink>
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-gold px-4 py-2 text-sm font-medium text-brand-navy shadow-sm hover:bg-brand-gold-hover"
               >
                 絞り込み
               </button>

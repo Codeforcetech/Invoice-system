@@ -89,7 +89,7 @@ export default async function AccountingPage({
               <AppButtonLink
                 key={key}
                 href={`/accounting?view=${key}`}
-                variant={view === key ? "primary" : "secondary"}
+                variant={view === key ? "selected" : "secondary"}
               >
                 {name}
               </AppButtonLink>

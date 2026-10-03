@@ -1,12 +1,12 @@
 /** フォーム共通（黒に近いデフォルト枠線を避け、SaaS調に統一） */
 export const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-text-primary shadow-sm placeholder:text-text-secondary focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
 
 export const selectClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-text-primary shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
 
 export const textareaClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/15";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-text-primary shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
 
 export const labelClass = "text-sm font-medium text-slate-700";
 export const labelClassXs = "text-xs font-medium text-slate-600";

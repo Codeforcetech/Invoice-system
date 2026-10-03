@@ -238,7 +238,7 @@ export function MailTemplateManager(props: { initialRows: MailTemplateRow[] }) {
             <button
               type="submit"
               disabled={busy}
-              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+              className="rounded-lg bg-brand-gold px-4 py-2 text-sm font-medium text-brand-navy hover:bg-brand-gold-hover disabled:opacity-50"
             >
               {busy ? "保存中…" : editingId ? "更新する" : "登録する"}
             </button>

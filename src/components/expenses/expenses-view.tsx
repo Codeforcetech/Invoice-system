@@ -119,7 +119,7 @@ export function ExpensesView({
                 setTo(current);
                 setPage(1);
               }}
-              className={`min-h-11 rounded-lg px-4 text-sm ${from === p.from && to === current ? "bg-[#183d44] text-white" : "bg-slate-100 text-slate-700"}`}
+              className={`min-h-11 rounded-lg px-4 text-sm ${from === p.from && to === current ? "bg-brand-navy text-white" : "bg-slate-100 text-slate-700"}`}
             >
               {p.label}
             </button>
@@ -222,7 +222,7 @@ export function ExpensesView({
         ].map((m, i) => (
           <div
             key={m.label}
-            className={`rounded-2xl border p-4 sm:p-5 ${i === 0 ? "border-[#183d44] bg-[#183d44] text-white" : "border-slate-200 bg-white"}`}
+            className={`rounded-2xl border p-4 sm:p-5 ${i === 0 ? "border-brand-navy bg-brand-navy text-white" : "border-slate-200 bg-white"}`}
           >
             <p className="text-xs">{m.label}</p>
             <p className="mt-4 break-all text-xl font-semibold tabular-nums sm:text-2xl">
@@ -278,7 +278,7 @@ export function ExpensesView({
                   className="flex h-full min-w-0 flex-1 items-end px-1 focus-visible:outline-2 focus-visible:outline-emerald-700"
                 >
                   <span
-                    className={`block w-full rounded-t-md ${m.month >= period.from && m.month <= period.to ? "bg-[#287b69]" : "bg-slate-300"}`}
+                    className={`block w-full rounded-t-md ${m.month >= period.from && m.month <= period.to ? "bg-brand-blue" : "bg-slate-300"}`}
                     style={{
                       height: `${(m.amount / maximum) * 100}%`,
                       minHeight: 2,
@@ -329,7 +329,7 @@ export function ExpensesView({
                   aria-hidden="true"
                 >
                   <div
-                    className="h-2 rounded-full bg-[#287b69]"
+                    className="h-2 rounded-full bg-brand-blue"
                     style={{
                       width: `${(c.amount / Math.max(1, summary.cost)) * 100}%`,
                     }}
@@ -369,7 +369,7 @@ export function ExpensesView({
               key={s.id}
               onClick={() => changeStatus(s.id)}
               aria-pressed={status === s.id}
-              className={`min-h-11 rounded-lg px-4 py-2 text-sm ${status === s.id ? "bg-[#183d44] text-white" : "bg-slate-100 text-slate-600"}`}
+              className={`min-h-11 rounded-lg px-4 py-2 text-sm ${status === s.id ? "bg-brand-navy text-white" : "bg-slate-100 text-slate-600"}`}
             >
               {s.label}
             </button>
@@ -443,7 +443,7 @@ export function ExpensesView({
             {canEdit && (
               <Link
                 href="/expenses/new"
-                className="mt-4 inline-block rounded-lg bg-[#183d44] px-5 py-3 text-sm text-white"
+                className="mt-4 inline-block rounded-lg bg-brand-navy px-5 py-3 text-sm text-white"
               >
                 ＋ 支払いを登録
               </Link>

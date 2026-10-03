@@ -12,7 +12,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
   const canEdit = hasRole(ws.role, "EDITOR");
   const memberRole = ws.isOwner ? undefined : roleLabel[ws.role];
   return (
-    <div className="app-workspace min-h-screen bg-[#f5f7f9] text-slate-800">
+    <div className="app-workspace min-h-screen bg-background text-slate-800">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:p-3"

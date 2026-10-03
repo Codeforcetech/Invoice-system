@@ -14,7 +14,7 @@ const monthLabel = (value: string) =>
 const periodLabel = (from: string, to: string) =>
   from === to ? monthLabel(from) : `${monthLabel(from)}〜${monthLabel(to)}`;
 const focus =
-  "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-700";
+  "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-blue";
 
 export function SalesOverview({
   filters: f,
@@ -57,7 +57,7 @@ export function SalesOverview({
               >
                 売上の確認
               </h2>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
                 請求ベース
               </span>
             </div>
@@ -67,7 +67,7 @@ export function SalesOverview({
           </div>
           <Link
             href={invoiceSalesHref(f.from, f.to, f.companyId)}
-            className={`rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-emerald-800 hover:bg-emerald-50 ${focus}`}
+            className={`rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50 ${focus}`}
           >
             対象の請求書を見る →
           </Link>
@@ -83,14 +83,14 @@ export function SalesOverview({
               aria-current={
                 f.from === p.from && f.to === p.to ? "true" : undefined
               }
-              className={`rounded-lg px-4 py-2.5 text-sm font-medium ${focus} ${f.from === p.from && f.to === p.to ? "bg-[#183d44] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              className={`rounded-lg px-4 py-2.5 text-sm font-medium ${focus} ${f.from === p.from && f.to === p.to ? "bg-brand-blue/15 text-brand-navy ring-1 ring-inset ring-brand-blue/40" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
             >
               {p.label}
             </Link>
           ))}
         </nav>
         <details className="mt-4 rounded-xl border border-slate-200 p-4" open={Boolean(f.companyId || f.basis === "transfer" || f.error)}>
-          <summary className={`cursor-pointer text-sm font-medium text-emerald-800 ${focus}`}>期間・取引先・金額を指定する</summary>
+          <summary className={`cursor-pointer text-sm font-medium text-sky-700 ${focus}`}>期間・取引先・金額を指定する</summary>
         <form
           action="/dashboard"
           key={`${f.from}-${f.to}-${f.companyId}-${f.basis}`}
@@ -151,7 +151,7 @@ export function SalesOverview({
           </label>
           <button
             type="submit"
-            className={`self-end rounded-lg bg-[#183d44] px-5 py-3 text-sm font-semibold text-white hover:bg-[#24515a] ${focus}`}
+            className={`self-end rounded-lg bg-brand-navy px-5 py-3 text-sm font-semibold text-white hover:bg-brand-navy/90 ${focus}`}
           >
             集計する
           </button>
@@ -183,7 +183,7 @@ export function SalesOverview({
         {f.companyId && (
           <Link
             href={dashboardHref({ companyId: "" })}
-            className={`text-emerald-800 underline underline-offset-4 ${focus}`}
+            className={`text-sky-700 underline underline-offset-4 ${focus}`}
           >
             取引先の絞り込みを解除
           </Link>
@@ -192,9 +192,9 @@ export function SalesOverview({
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Link
           href={invoiceSalesHref(f.from, f.to, f.companyId)}
-          className={`rounded-2xl bg-[#183d44] p-5 text-white ${focus}`}
+          className={`rounded-2xl bg-brand-navy p-5 text-white ${focus}`}
         >
-          <p className="text-xs text-emerald-100">{basisLabel}</p>
+          <p className="text-xs text-sky-100">{basisLabel}</p>
           <p className="mt-4 break-all text-xl font-semibold sm:text-3xl tracking-tight tabular-nums">
             {yen(s.total)}
           </p>
@@ -292,7 +292,7 @@ export function SalesOverview({
                   className={`group relative z-10 flex h-full min-w-0 flex-1 flex-col justify-end rounded-t-lg px-1 ${focus}`}
                 >
                   <span
-                    className={`block rounded-t-md transition-colors group-hover:bg-emerald-600 ${m.month >= f.from && m.month <= f.to ? "bg-[#287b69]" : "bg-slate-300"}`}
+                    className={`block rounded-t-md transition-colors group-hover:bg-sky-600 ${m.month >= f.from && m.month <= f.to ? "bg-brand-blue" : "bg-slate-300"}`}
                     style={{
                       height: `${Math.max(m.amount > 0 ? 2 : 0, (m.amount / maxAmount) * 100)}%`,
                       minHeight: 2,
@@ -323,7 +323,7 @@ export function SalesOverview({
           </div>
           <details className="mt-4 border-t border-slate-100 pt-4">
             <summary
-              className={`cursor-pointer text-sm font-medium text-emerald-800 ${focus}`}
+              className={`cursor-pointer text-sm font-medium text-sky-700 ${focus}`}
             >
               月別の金額を一覧で見る
             </summary>
@@ -382,7 +382,7 @@ export function SalesOverview({
                         aria-hidden="true"
                       >
                         <div
-                          className="h-full rounded-full bg-[#287b69]"
+                          className="h-full rounded-full bg-brand-blue"
                           style={{
                             width: `${Math.max(0, (c.amount / maxCompany) * 100)}%`,
                           }}
@@ -403,7 +403,7 @@ export function SalesOverview({
               </ol>
               {s.companies.length > 5 && (
                 <details className="mt-5 border-t border-slate-100 pt-4">
-                  <summary className="cursor-pointer text-sm text-emerald-800">
+                  <summary className="cursor-pointer text-sm text-sky-700">
                     残り{s.companies.length - 5}社も見る
                   </summary>
                   <ul className="mt-2 divide-y divide-slate-100">

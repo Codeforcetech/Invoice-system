@@ -76,7 +76,7 @@ export function UserCreateForm() {
       <div className="flex justify-end pt-1">
         <button
           type="submit"
-          className="rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+          className="rounded-lg bg-brand-gold px-5 py-2.5 text-sm font-medium text-brand-navy shadow-sm hover:bg-brand-gold-hover disabled:opacity-60"
           disabled={saving}
         >
           {saving ? "作成中..." : "作成する"}

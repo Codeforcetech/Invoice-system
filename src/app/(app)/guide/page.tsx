@@ -244,7 +244,7 @@ export default function GuidePage() {
         description="はじめての請求書も、毎月の管理も。やりたいことから探せます。"
       />
       <section
-        className="rounded-2xl bg-[#183d44] p-6 text-white sm:p-8"
+        className="rounded-2xl bg-brand-navy p-6 text-white sm:p-8"
         aria-labelledby="guide-start"
       >
         <p className="text-xs font-medium tracking-widest text-emerald-200">
@@ -300,7 +300,7 @@ export default function GuidePage() {
             className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-7"
           >
             <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#183d44] text-sm font-semibold text-white">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-navy text-sm font-semibold text-white">
                 {i + 1}
               </span>
               <h2 id={`${c.id}-heading`} className="text-lg font-semibold">

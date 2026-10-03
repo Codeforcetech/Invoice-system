@@ -1,11 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #f8f9fa;
+  --seiq-navy: #0d1b2a;
+  --seiq-gold: #d4af37;
+  --seiq-gold-hover: #c5a028;
+  --seiq-blue: #3a86ef;
+  --seiq-surface: #ffffff;
+  --seiq-border: #e2e8f0;
+  --seiq-text-secondary: #64748b;
   --foreground: #1e293b;
 }
 
 @theme inline {
+  --color-brand-navy: var(--seiq-navy);
+  --color-brand-gold: var(--seiq-gold);
+  --color-brand-gold-hover: var(--seiq-gold-hover);
+  --color-brand-blue: var(--seiq-blue);
+  --color-surface: var(--seiq-surface);
+  --color-form-border: var(--seiq-border);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--seiq-text-secondary);
+  --color-slate-200: var(--seiq-border);
+  --color-slate-500: var(--seiq-text-secondary);
+  --color-slate-800: var(--foreground);
+  --color-sky-50: #eff6ff;
+  --color-sky-100: #dbeafe;
+  --color-sky-200: #bfdbfe;
+  --color-sky-300: #93c5fd;
+  --color-sky-400: #60a5fa;
+  --color-sky-500: var(--seiq-blue);
+  --color-sky-600: #2369c9;
+  --color-sky-700: #1d56a4;
+  --color-sky-800: #1e4780;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -15,7 +42,8 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  font-family:
+    Arial, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
 }
 
 /* `border` のみ指定した要素が foreground で真っ黒に見えないよう、既定の枠色を薄くする */
@@ -23,19 +51,44 @@ body {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   select,
   textarea {
-    border-color: rgb(226 232 240);
+    border-color: var(--seiq-border);
+    background-color: var(--seiq-surface);
+    color: var(--foreground);
   }
 }
 
 @layer base {
-  :root { color-scheme: light; }
-  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
-  button:not(:disabled), summary { cursor: pointer; }
-  :focus-visible { outline: 2px solid #0d9488; outline-offset: 3px; }
-  input, textarea, select { scroll-margin-block: 7rem; }
-  [id] { scroll-margin-top: 2rem; }
+  :root {
+    color-scheme: light;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--seiq-blue);
+    outline-offset: 3px;
+  }
+  input,
+  textarea,
+  select {
+    scroll-margin-block: 7rem;
+  }
+  [id] {
+    scroll-margin-top: 2rem;
+  }
 }
-.app-workspace { --color-sky-50: #eff8f6; --color-sky-100: #daf0e9; --color-sky-400: #38b6a0; --color-sky-500: #149981; --color-sky-600: #087e6d; --color-sky-700: #086757; }
 @media (max-width: 640px) {
-  .app-workspace input:not([type=checkbox]):not([type=radio]), .app-workspace select, .app-workspace textarea { font-size: 16px; }
+  .app-workspace input:not([type="checkbox"]):not([type="radio"]),
+  .app-workspace select,
+  .app-workspace textarea {
+    font-size: 16px;
+  }
 }

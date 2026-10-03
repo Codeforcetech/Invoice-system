@@ -19,8 +19,8 @@ import { isEmbeddedStamp } from "@/lib/invoice/resolveStampImageUrl";
 import { StampImage } from "@/components/invoices/stamp-image";
 
 const sectionBox =
-  "rounded-xl border border-slate-100 bg-slate-50/40 p-5 md:p-6";
-const sectionTitle = "text-base font-semibold text-slate-900";
+  "rounded-xl border border-slate-200 bg-white p-5 md:p-6";
+const sectionTitle = "text-base font-semibold text-text-primary";
 
 export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
   const [saving, setSaving] = useState(false);
@@ -421,7 +421,7 @@ export function SettingsForm(props: { initialValues: SettingsUpdateInput }) {
       <div className="sticky bottom-0 z-10 flex justify-end border-t border-slate-100 bg-white/95 py-4">
         <button
           type="submit"
-          className="rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+          className="rounded-lg bg-brand-gold px-5 py-2.5 text-sm font-medium text-brand-navy shadow-sm hover:bg-brand-gold-hover disabled:opacity-60"
           disabled={saving}
         >
           {saving ? "更新中..." : "設定を更新"}

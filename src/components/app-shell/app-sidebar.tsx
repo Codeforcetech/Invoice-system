@@ -94,16 +94,19 @@ export function SidebarContent(props: {
         <BrandLogo light />
       </Link>
       {props.canEdit !== false && (
-      <Link
-        href="/invoices/new"
-        onClick={props.onNavigate}
-        className="mt-9 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-3 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-200"
-      >
-        <AppIcon name="plus" />
-        請求書を作成
-      </Link>
+        <Link
+          href="/invoices/new"
+          onClick={props.onNavigate}
+          className="mt-9 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-gold px-3 py-3 text-sm font-bold text-brand-navy transition-colors hover:bg-brand-gold-hover"
+        >
+          <AppIcon name="plus" />
+          請求書を作成
+        </Link>
       )}
-      <nav aria-label="メインメニュー" className={`${props.canEdit !== false ? "mt-6" : "mt-9"} flex-1 space-y-6`}>
+      <nav
+        aria-label="メインメニュー"
+        className={`${props.canEdit !== false ? "mt-6" : "mt-9"} flex-1 space-y-6`}
+      >
         {[...new Set(entries.map((n) => n.group))].map((group) => (
           <div key={group}>
             <p className="mb-2 px-3 text-[10px] font-medium tracking-widest text-slate-400">
@@ -121,12 +124,12 @@ export function SidebarContent(props: {
                       href={n.href}
                       aria-current={active ? "page" : undefined}
                       onClick={props.onNavigate}
-                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors ${active ? "bg-white/10 text-emerald-200" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors ${active ? "bg-brand-blue/20 text-sky-200 ring-1 ring-inset ring-brand-blue/30" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
                     >
                       <AppIcon name={n.icon} />
                       {n.label}
                       {active && (
-                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-blue" />
                       )}
                     </Link>
                   );
@@ -173,7 +176,7 @@ export function AppSidebar(props: {
   memberRole?: string;
 }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] overflow-y-auto bg-[#132b32] lg:block">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] overflow-y-auto bg-brand-navy lg:block">
       <SidebarContent {...props} />
     </aside>
   );

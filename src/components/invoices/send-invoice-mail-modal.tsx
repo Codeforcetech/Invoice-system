@@ -533,7 +533,7 @@ function GmailComposer(props: Props & { invoiceId: string }) {
                 !reviewed ||
                 unknown
               }
-              className="w-full rounded-lg bg-sky-600 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-brand-gold px-4 py-3 text-sm font-semibold text-brand-navy hover:bg-brand-gold-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? phase : "Googleと連携して下書きを作成"}
             </button>
