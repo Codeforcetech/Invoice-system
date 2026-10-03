@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { dateText, invoiceDateText } from "@/lib/accounting/model";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-import { AppButtonLink } from "@/components/ui/app-button";
 import { AccountingLinks } from "@/components/accounting/links";
 import { inputClass } from "@/lib/ui/form-classes";
 export default async function LinkingPage({
@@ -81,11 +80,6 @@ export default async function LinkingPage({
         variant="page"
         title="請求・支払連携"
         description="請求から入金まで、支払予定から出金までを帳簿につなげます。"
-        action={
-          <AppButtonLink href="/accounting" variant="secondary">
-            帳簿へ戻る
-          </AppButtonLink>
-        }
       />
       <form className="flex flex-wrap gap-3">
         <input

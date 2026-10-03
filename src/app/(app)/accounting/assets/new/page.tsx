@@ -10,7 +10,6 @@ import {
 import { AccountingSetup } from "@/components/accounting/setup";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-import { AppButtonLink } from "@/components/ui/app-button";
 export default async function NewAssetPage() {
   const ws = await requireWorkspacePage("ADMIN");
   const [setting, accounts] = await Promise.all([
@@ -30,11 +29,6 @@ export default async function NewAssetPage() {
         variant="page"
         title="固定資産を登録"
         description="情報を入力すると、初年度の償却費をその場で確認できます。"
-        action={
-          <AppButtonLink href="/accounting/assets" variant="secondary">
-            台帳へ戻る
-          </AppButtonLink>
-        }
       />
       {!setting ? (
         <AccountingSetup />

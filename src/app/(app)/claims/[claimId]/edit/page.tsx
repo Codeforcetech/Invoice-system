@@ -5,7 +5,6 @@ import { dateText } from "@/lib/accounting/model";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-import { AppButtonLink } from "@/components/ui/app-button";
 import { ClaimForm } from "@/components/claims/form";
 export default async function EditClaim({
   params,
@@ -27,15 +26,7 @@ export default async function EditClaim({
     notFound();
   return (
     <PageShell>
-      <SectionHeader
-        variant="page"
-        title="経費申請を編集"
-        action={
-          <AppButtonLink href={`/claims/${c.id}`} variant="secondary">
-            内容へ戻る
-          </AppButtonLink>
-        }
-      />
+      <SectionHeader variant="page" title="経費申請を編集" />
       <ClaimForm
         ownerId={c.ownerId}
         workspaceName={c.workspace.name}

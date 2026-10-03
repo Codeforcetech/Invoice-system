@@ -129,9 +129,6 @@ export default async function EvidenceDetailPage({
             <AppButtonLink href={`/api/evidence/${e.id}`}>
               ダウンロード
             </AppButtonLink>
-            <AppButtonLink href="/accounting/evidence" variant="secondary">
-              一覧へ戻る
-            </AppButtonLink>
           </div>
         }
       />

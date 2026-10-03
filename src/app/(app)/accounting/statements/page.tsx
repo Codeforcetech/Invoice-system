@@ -5,7 +5,6 @@ import { dateText } from "@/lib/accounting/model";
 import { suggestions } from "@/lib/accounting/statements";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-import { AppButtonLink } from "@/components/ui/app-button";
 import { StatementWorkspace } from "@/components/accounting/statements";
 export default async function StatementsPage({
   searchParams,
@@ -19,7 +18,9 @@ export default async function StatementsPage({
 }) {
   const ws = await requireWorkspacePage("VIEWER");
   if (
-    !(await prisma.accountingSetting.findUnique({ where: { userId: ws.ownerId } }))
+    !(await prisma.accountingSetting.findUnique({
+      where: { userId: ws.ownerId },
+    }))
   )
     redirect("/accounting");
   const sp = await searchParams;
@@ -83,11 +84,6 @@ export default async function StatementsPage({
         variant="page"
         title="明細取込・自動仕訳"
         description="銀行・カードのCSVを取り込み、内容を確認して帳簿に登録します。"
-        action={
-          <AppButtonLink href="/accounting" variant="secondary">
-            帳簿へ戻る
-          </AppButtonLink>
-        }
       />
       <StatementWorkspace
         key={`${feed?.id ?? "new"}:${status}:${page}`}

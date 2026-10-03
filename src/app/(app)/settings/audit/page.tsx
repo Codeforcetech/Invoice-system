@@ -50,11 +50,6 @@ export default async function AuditPage({
         variant="page"
         title="操作ログ"
         description="誰がいつ何を変更したかの記録です。記録は後から変更・削除できません。"
-        action={
-          <AppButtonLink href="/settings/members" variant="secondary">
-            メンバー・権限へ戻る
-          </AppButtonLink>
-        }
       />
       <Card>
         <CardSection>
@@ -80,7 +75,9 @@ export default async function AuditPage({
             >
               絞り込む
             </button>
-            <p className="text-sm text-slate-500">{total.toLocaleString("ja-JP")}件</p>
+            <p className="text-sm text-slate-500">
+              {total.toLocaleString("ja-JP")}件
+            </p>
           </form>
         </CardSection>
       </Card>
@@ -118,7 +115,10 @@ export default async function AuditPage({
         </table>
       </DataTableShell>
       {pages > 1 && (
-        <nav className="flex items-center justify-between text-sm" aria-label="ページ送り">
+        <nav
+          className="flex items-center justify-between text-sm"
+          aria-label="ページ送り"
+        >
           {page > 1 ? (
             <AppButtonLink href={href(page - 1)} variant="secondary">
               前へ

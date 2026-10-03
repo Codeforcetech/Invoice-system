@@ -54,14 +54,6 @@ export default async function ClaimPage({
         variant="page"
         title={c.title}
         description={`${c.workspace.name} ／ ${claimStatus[c.status]}`}
-        action={
-          <AppButtonLink
-            href={`/claims?owner=${c.ownerId}`}
-            variant="secondary"
-          >
-            経費精算へ戻る
-          </AppButtonLink>
-        }
       />
       <div className="grid items-start gap-5 xl:grid-cols-2">
         <div className="space-y-5">

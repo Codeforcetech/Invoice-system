@@ -17,7 +17,6 @@ import {
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import type { MailTemplate } from "@prisma/client";
 import type { CompanyForInvoiceForm } from "@/actions/company-actions";
 import {
@@ -474,13 +473,7 @@ export function InvoiceForm(props: {
       }}
       className="invoice-editor min-w-0 space-y-5 text-slate-900"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href="/invoices"
-          className="text-xs font-medium text-slate-500 hover:text-sky-700"
-        >
-          ← 請求書一覧
-        </Link>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
           {values.status === "ISSUED"
             ? "発行済み"

@@ -101,11 +101,6 @@ export default async function EvidencePage({
         variant="page"
         title="証憑ファイルボックス"
         description="領収書・請求書などを、受け取ったままの内容で保存し、取引年月日・金額・取引先で探せます。"
-        action={
-          <AppButtonLink href="/accounting" variant="secondary">
-            会計・帳簿へ戻る
-          </AppButtonLink>
-        }
       />
       <p className="rounded-xl bg-slate-50 p-4 text-xs leading-6 text-slate-600">
         {RETENTION_NOTE}

@@ -4,7 +4,6 @@ import { claimPermission } from "@/lib/claims/access";
 import { redirect, notFound } from "next/navigation";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-import { AppButtonLink } from "@/components/ui/app-button";
 import { ClaimForm } from "@/components/claims/form";
 export default async function NewClaim({
   searchParams,
@@ -24,11 +23,6 @@ export default async function NewClaim({
         variant="page"
         title="経費を申請"
         description="利用内容とレシートを登録し、承認を依頼します。"
-        action={
-          <AppButtonLink href="/claims" variant="secondary">
-            一覧へ戻る
-          </AppButtonLink>
-        }
       />
       <ClaimForm ownerId={owner} workspaceName={permission.workspace.name} />
     </PageShell>

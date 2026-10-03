@@ -135,9 +135,6 @@ export default async function AssetDetailPage({
         description={`${methods[initial.method]} ／ ${initial.method === "NONE" ? "償却対象外" : `耐用年数 ${asset.usefulLife}年`} ／ ${asset.archived ? "保管済み" : "管理中"}`}
         action={
           <div className="flex gap-2">
-            <AppButtonLink variant="secondary" href="/accounting/assets">
-              台帳へ戻る
-            </AppButtonLink>
             <AppButtonLink
               href={`/accounting/assets/${asset.id}?edit=1`}
               variant="secondary"

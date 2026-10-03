@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BackLink } from "@/components/app-shell/back-link";
 
 const maxMap = {
   "4xl": "max-w-4xl",
@@ -31,6 +32,7 @@ export function PageShell(props: {
         .filter(Boolean)
         .join(" ")}
     >
+      <BackLink />
       {props.children}
     </div>
   );

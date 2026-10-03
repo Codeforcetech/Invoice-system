@@ -30,9 +30,6 @@ export default async function MembersPage() {
             <AppButtonLink href="/settings/audit" variant="secondary">
               操作ログ
             </AppButtonLink>
-            <AppButtonLink href="/settings" variant="secondary">
-              自社情報・設定へ戻る
-            </AppButtonLink>
           </div>
         }
       />

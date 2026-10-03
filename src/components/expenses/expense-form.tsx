@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveExpense } from "@/actions/expense-actions";
@@ -25,9 +24,6 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
   const today = japanToday();
   return (
     <PageShell maxWidth="5xl">
-      <Link href="/expenses" className="self-start text-sm text-emerald-800">
-        ← 支払管理に戻る
-      </Link>
       <SectionHeader
         variant="page"
         title={expense ? "支払情報の編集" : "支払いを登録"}
