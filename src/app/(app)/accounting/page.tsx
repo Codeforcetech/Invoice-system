@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
+import { isTaxCategory, taxCategoryInfo } from "@/lib/tax/categories";
 import { hasRole } from "@/lib/workspace/access";
 import { accountingReport } from "@/lib/accounting/reports";
 import { dateText, yen } from "@/lib/accounting/model";
@@ -29,7 +30,7 @@ export default async function AccountingPage({
     where: { userId: ws.ownerId },
     orderBy: { code: "asc" },
   });
-  const view = ["journal", "ledger", "transactions", "accounts"].includes(
+  const view = ["journal", "ledger", "transactions", "tax", "accounts"].includes(
     str("view"),
   )
     ? str("view")
@@ -84,6 +85,7 @@ export default async function AccountingPage({
               ["journal", "仕訳帳"],
               ["ledger", "総勘定元帳"],
               ["transactions", "取引データ"],
+              ["tax", "消費税区分別"],
               ["accounts", "勘定科目"],
             ].map(([key, name]) => (
               <AppButtonLink
@@ -173,9 +175,11 @@ export default async function AccountingPage({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-semibold">
                       {report.title}{" "}
-                      <span className="text-sm font-normal text-slate-500">
-                        {report.entries.length}件
-                      </span>
+                      {view !== "tax" && (
+                        <span className="text-sm font-normal text-slate-500">
+                          {report.entries.length}件
+                        </span>
+                      )}
                     </h2>
                     <div className="flex gap-2">
                       <a
@@ -246,6 +250,11 @@ export default async function AccountingPage({
                                     >
                                       <td className="p-2">
                                         {l.account.code} {l.account.name}
+                                        {isTaxCategory(l.taxCategory) && (
+                                          <span className="ml-2 text-xs text-slate-500">
+                                            （{taxCategoryInfo[l.taxCategory].label}）
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="p-2 text-right tabular-nums">
                                         {l.debit ? yen(l.debit) : "—"}

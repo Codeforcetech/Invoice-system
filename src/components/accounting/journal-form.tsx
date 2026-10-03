@@ -7,6 +7,18 @@ import { japanToday } from "@/lib/expenses/model";
 import { AppButton, AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
 import { inputClass, selectClass } from "@/lib/ui/form-classes";
+import { TAX_CATEGORIES, taxCategoryInfo } from "@/lib/tax/categories";
+
+const taxOptions = (
+  <>
+    <option value="">指定しない</option>
+    {TAX_CATEGORIES.map((c) => (
+      <option key={c} value={c}>
+        {taxCategoryInfo[c].label}
+      </option>
+    ))}
+  </>
+);
 export function JournalForm({
   accounts,
   startDate,
@@ -22,9 +34,20 @@ export function JournalForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [lines, setLines] = useState([
-    { accountId: accounts[0]?.id ?? "", debit: "", credit: "" },
-    { accountId: accounts[1]?.id ?? "", debit: "", credit: "" },
+    {
+      accountId: accounts[0]?.id ?? "",
+      debit: "",
+      credit: "",
+      taxCategory: "",
+    },
+    {
+      accountId: accounts[1]?.id ?? "",
+      debit: "",
+      credit: "",
+      taxCategory: "",
+    },
   ]);
+  const [counterTax, setCounterTax] = useState("");
   const [fixed, setFixed] = useState(
     accounts.find((a) => a.code === "110")?.id ?? accounts[0]?.id ?? "",
   );
@@ -50,6 +73,7 @@ export function JournalForm({
             accountId: counter,
             debit: side === "credit" ? Number(amount) : 0,
             credit: side === "debit" ? Number(amount) : 0,
+            taxCategory: counterTax,
           },
         ];
   const debit = parsed.reduce((s, l) => s + l.debit, 0),
@@ -175,6 +199,23 @@ export function JournalForm({
                       />
                     </label>
                   ))}
+                  <label className="col-span-2 text-xs md:col-span-4">
+                    消費税の区分（任意・売上や仕入の行に指定します）
+                    <select
+                      aria-label={`消費税の区分 ${i + 1}`}
+                      value={l.taxCategory}
+                      onChange={(e) =>
+                        setLines(
+                          lines.map((x, j) =>
+                            j === i ? { ...x, taxCategory: e.target.value } : x,
+                          ),
+                        )
+                      }
+                      className={`mt-1 ${selectClass}`}
+                    >
+                      {taxOptions}
+                    </select>
+                  </label>
                   <AppButton
                     variant="ghost"
                     disabled={lines.length <= 2}
@@ -190,7 +231,12 @@ export function JournalForm({
                 onClick={() =>
                   setLines([
                     ...lines,
-                    { accountId: accounts[0]?.id ?? "", debit: "", credit: "" },
+                    {
+                      accountId: accounts[0]?.id ?? "",
+                      debit: "",
+                      credit: "",
+                      taxCategory: "",
+                    },
                   ])
                 }
               >
@@ -217,6 +263,16 @@ export function JournalForm({
                   className={`mt-1 ${selectClass}`}
                 >
                   {options}
+                </select>
+              </label>
+              <label className="text-sm">
+                相手科目の消費税区分（任意）
+                <select
+                  value={counterTax}
+                  onChange={(e) => setCounterTax(e.target.value)}
+                  className={`mt-1 ${selectClass}`}
+                >
+                  {taxOptions}
                 </select>
               </label>
               <label className="text-sm">

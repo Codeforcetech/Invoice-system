@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TAX_CATEGORIES } from "@/lib/tax/categories";
 export const EXPENSE_CATEGORIES = [
   "外注費",
   "仕入",
@@ -33,6 +34,10 @@ export const expenseSchema = z.object({
   supplier: z.string().trim().min(1, "支払先を入力してください").max(150),
   description: z.string().trim().min(1, "支払内容を入力してください").max(300),
   category: z.enum(EXPENSE_CATEGORIES),
+  /** 課税仕入などの消費税区分。未設定（null）は区分を指定しない */
+  taxCategory: z
+    .preprocess((v) => (v === "" ? null : v), z.enum(TAX_CATEGORIES).nullable())
+    .optional(),
   amount: z.coerce
     .number()
     .int("金額は整数で入力してください")
@@ -57,6 +62,7 @@ export type ExpenseRow = {
   supplier: string;
   description: string;
   category: string;
+  taxCategory?: string | null;
   amount: number;
   costMonth: string;
   dueDate: string;

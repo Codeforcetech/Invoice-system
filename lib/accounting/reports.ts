@@ -2,9 +2,20 @@ import { prisma } from "@/lib/db/prisma";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { daySchema, dateText, debitNormal } from "./model";
+import {
+  buildTaxRows,
+  taxReportHeaders,
+  taxReportPdfWidths,
+} from "./tax-report";
+import { isTaxCategory, taxCategoryInfo } from "@/lib/tax/categories";
+type EntryWithLines = Prisma.JournalEntryGetPayload<{
+  include: { lines: { include: { account: true } } };
+}>;
 export const reportSchema = z
   .object({
-    view: z.enum(["journal", "ledger", "transactions"]).default("journal"),
+    view: z
+      .enum(["journal", "ledger", "transactions", "tax"])
+      .default("journal"),
     from: daySchema,
     to: daySchema,
     accountId: z.string().max(100).default(""),
@@ -27,6 +38,42 @@ async function buildReport(
     : null;
   if (f.view === "ledger" && !account)
     throw new Error("元帳を表示する勘定科目を選択してください。");
+  if (f.view === "tax") {
+    const grouped = await db.journalLine.groupBy({
+      by: ["accountId", "taxCategory"],
+      where: {
+        userId,
+        entry: { date: { gte: new Date(f.from), lte: new Date(f.to) } },
+      },
+      _sum: { debit: true, credit: true },
+    });
+    const kinds = new Map(
+      (
+        await db.account.findMany({
+          where: { userId, id: { in: grouped.map((g) => g.accountId) } },
+          select: { id: true, kind: true },
+        })
+      ).map((a) => [a.id, a.kind]),
+    );
+    return {
+      f,
+      account: null,
+      entries: [] as EntryWithLines[],
+      opening: 0,
+      balance: 0,
+      rows: buildTaxRows(
+        grouped.map((g) => ({
+          kind: kinds.get(g.accountId) ?? "",
+          taxCategory: g.taxCategory,
+          debit: g._sum.debit ?? 0,
+          credit: g._sum.credit ?? 0,
+        })),
+      ),
+      headers: taxReportHeaders,
+      title: "消費税区分別集計",
+      widths: taxReportPdfWidths as number[] | undefined,
+    };
+  }
   const entries = await db.journalEntry.findMany({
     where: {
       userId,
@@ -90,6 +137,9 @@ async function buildReport(
               ? "取消"
               : e.source,
           e.sourceId ?? "",
+          isTaxCategory(l.taxCategory)
+            ? taxCategoryInfo[l.taxCategory].label
+            : "",
         ]);
   }
   return {
@@ -99,6 +149,7 @@ async function buildReport(
     opening,
     balance,
     rows,
+    widths: undefined as number[] | undefined,
     headers:
       f.view === "ledger"
         ? ["日付", "摘要", "相手科目", "借方", "貸方", "残高"]
@@ -112,6 +163,7 @@ async function buildReport(
             "貸方",
             "入力元",
             "連携ID",
+            "消費税区分",
           ],
     title:
       f.view === "ledger"

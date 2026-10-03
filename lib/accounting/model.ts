@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TAX_CATEGORIES } from "@/lib/tax/categories";
 export const kinds = {
   ASSET: "資産",
   LIABILITY: "負債",
@@ -18,6 +19,10 @@ export const lineSchema = z
     accountId: z.string().min(1),
     debit: z.coerce.number().int().min(0).max(2147483647),
     credit: z.coerce.number().int().min(0).max(2147483647),
+    /** 消費税区分。未設定（null）は区分を指定しない仕訳 */
+    taxCategory: z
+      .preprocess((v) => (v === "" ? null : v), z.enum(TAX_CATEGORIES).nullable())
+      .optional(),
   })
   .refine(
     (l) => l.debit > 0 !== l.credit > 0,

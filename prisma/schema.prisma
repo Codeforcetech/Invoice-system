@@ -299,6 +299,8 @@ model Expense {
   supplier    String
   description String
   category    String
+  /// 課税仕入などの消費税区分。null は未設定
+  taxCategory String?
   amount      Int
   costMonth   String
   dueDate     DateTime           @db.Date
@@ -377,6 +379,8 @@ model JournalLine {
   accountId String
   debit     Int          @default(0)
   credit    Int          @default(0)
+  /// 消費税区分。null は未設定（既存の仕訳・区分を指定しない仕訳）
+  taxCategory String?
   entry     JournalEntry @relation(fields: [userId, entryId], references: [userId, id], onDelete: Cascade)
   account   Account      @relation(fields: [userId, accountId], references: [userId, id])
 

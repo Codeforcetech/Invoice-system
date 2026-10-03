@@ -53,6 +53,7 @@ export async function GET(request: Request) {
               `${r.f.from} - ${r.f.to}`,
               r.headers,
               r.rows,
+              r.widths ? { widths: r.widths } : undefined,
             ),
           );
     await recordAudit(prisma, ws, {

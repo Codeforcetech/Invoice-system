@@ -10,6 +10,7 @@ import {
   type ExpenseRow,
 } from "@/lib/expenses/model";
 import { inputClass, selectClass } from "@/lib/ui/form-classes";
+import { TAX_CATEGORIES, taxCategoryInfo } from "@/lib/tax/categories";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
@@ -91,6 +92,24 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
                     <option key={c}>{c}</option>
                   ))}
                 </select>
+              </label>
+              <label className="text-sm font-medium">
+                消費税の区分
+                <select
+                  name="taxCategory"
+                  defaultValue={expense?.taxCategory ?? ""}
+                  className={`mt-2 ${selectClass}`}
+                >
+                  <option value="">指定しない</option>
+                  {TAX_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {taxCategoryInfo[c].label}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  課税仕入などの集計に使います。指定しない支払いは「未設定」として集計します。
+                </span>
               </label>
               <label className="text-sm font-medium sm:col-span-2">
                 支払内容 <span className="text-xs text-rose-700">必須</span>

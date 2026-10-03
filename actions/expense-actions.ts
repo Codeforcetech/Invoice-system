@@ -17,6 +17,7 @@ const select = {
   supplier: true,
   description: true,
   category: true,
+  taxCategory: true,
   amount: true,
   costMonth: true,
   dueDate: true,

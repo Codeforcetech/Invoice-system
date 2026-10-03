@@ -2,11 +2,38 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Tx } from "./service";
 import { postJournal, reverseJournal } from "./service";
 import { dateText, invoiceDateText } from "./model";
+import { hasTaxCategories } from "@/lib/invoice/calculateInvoice";
+import { invoiceTaxGroups } from "@/lib/invoice/taxBreakdown";
+import { isTaxCategory, type TaxCategory } from "@/lib/tax/categories";
 type Posting = {
   date: string;
   memo: string;
-  lines: { code: string; debit: number; credit: number }[];
+  lines: {
+    code: string;
+    debit: number;
+    credit: number;
+    /** 消費税区分（未設定は null/未指定） */
+    tax?: TaxCategory | null;
+  }[];
+  /**
+   * 税区分が利用者の指定による（明細・支払の区分）か。指定によるときだけ内容の指紋に含める。
+   * 区分を導出しただけの仕訳は指紋を変えないので、既存の連携仕訳が再記帳されない。
+   */
+  taxExplicit?: boolean;
 };
+/** The fingerprint of a posting without explicit tax data is the same as before tax categories existed. */
+function fingerprintView(posting: Posting | null) {
+  if (!posting) return null;
+  return {
+    date: posting.date,
+    memo: posting.memo,
+    lines: posting.lines.map((l) =>
+      posting.taxExplicit
+        ? { code: l.code, debit: l.debit, credit: l.credit, tax: l.tax ?? null }
+        : { code: l.code, debit: l.debit, credit: l.credit },
+    ),
+  };
+}
 async function syncPosting(
   tx: Tx,
   userId: string,
@@ -16,7 +43,7 @@ async function syncPosting(
   posting: Posting | null,
 ) {
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify(posting))
+    .update(JSON.stringify(fingerprintView(posting)))
     .digest("hex");
   const old = await tx.accountingSource.findUnique({
     where: { userId_key: { userId, key } },
@@ -45,7 +72,12 @@ async function syncPosting(
       .map((l) => {
         const a = accounts.find((a) => a.code === l.code);
         if (!a) throw new Error("自動仕訳の標準科目が不足しています。");
-        return { accountId: a.id, debit: l.debit, credit: l.credit };
+        return {
+          accountId: a.id,
+          debit: l.debit,
+          credit: l.credit,
+          taxCategory: l.tax ?? null,
+        };
       });
     if (lines.length) {
       const e = await postJournal(
@@ -74,7 +106,10 @@ export async function syncInvoice(tx: Tx, userId: string, id: string) {
   if (!setting) return;
   const inv = await tx.invoice.findFirst({
     where: { id, createdById: userId },
-    include: { company: true },
+    include: {
+      company: true,
+      items: { select: { amount: true, taxCategory: true } },
+    },
   });
   if (!inv) throw new Error("請求書が見つかりません。");
   const eligible =
@@ -97,8 +132,15 @@ export async function syncInvoice(tx: Tx, userId: string, id: string) {
           memo: `請求: ${label}`,
           lines: [
             { code: "120", debit: inv.totalWithTax, credit: 0 },
-            { code: "400", debit: 0, credit: inv.totalWithTax },
+            // Sales are split by tax group (tax included); the total is unchanged.
+            ...invoiceTaxGroups(inv).map((g) => ({
+              code: "400",
+              debit: 0,
+              credit: g.total,
+              tax: isTaxCategory(g.key) ? g.key : null,
+            })),
           ],
+          taxExplicit: hasTaxCategories(inv.items),
         }
       : null,
   );
@@ -160,9 +202,11 @@ export async function syncExpense(tx: Tx, userId: string, id: string) {
               code: expenseCodes[e.category] ?? "580",
               debit: e.amount,
               credit: 0,
+              tax: isTaxCategory(e.taxCategory) ? e.taxCategory : null,
             },
             { code: payable, debit: 0, credit: e.amount },
           ],
+          taxExplicit: isTaxCategory(e.taxCategory),
         }
       : null,
   );

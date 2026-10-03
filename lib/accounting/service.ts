@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { journalSchema, dateText, type EntryInput } from "./model";
+import { isTaxCategory } from "@/lib/tax/categories";
 export type Tx = Prisma.TransactionClient;
 export async function accountingLock(tx: Tx, userId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"seiq-accounting:" + userId}))`;
@@ -22,9 +23,18 @@ export async function postJournal(
   });
   if (existing) {
     const signature = (
-      lines: { accountId: string; debit: number; credit: number }[],
+      lines: {
+        accountId: string;
+        debit: number;
+        credit: number;
+        taxCategory?: string | null;
+      }[],
     ) =>
-      JSON.stringify(lines.map((l) => [l.accountId, l.debit, l.credit]).sort());
+      JSON.stringify(
+        lines
+          .map((l) => [l.accountId, l.debit, l.credit, l.taxCategory ?? null])
+          .sort(),
+      );
     if (
       existing.memo !== input.memo ||
       dateText(existing.date) !== input.date ||
@@ -88,6 +98,8 @@ export async function reverseJournal(
         accountId: l.accountId,
         debit: l.credit,
         credit: l.debit,
+        // The reversal offsets the original line, including its tax category.
+        taxCategory: isTaxCategory(l.taxCategory) ? l.taxCategory : null,
       })),
     },
     "REVERSAL",
