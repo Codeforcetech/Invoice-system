@@ -36,7 +36,8 @@ const rules: {
     }),
   },
   {
-    pattern: /^\/accounting\/(assets|evidence|linking|statements|opening)$/,
+    pattern:
+      /^\/accounting\/(assets|evidence|linking|statements|opening|received)$/,
     parent: () => ({ href: "/accounting", label: "会計・帳簿" }),
   },
   {
