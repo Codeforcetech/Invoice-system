@@ -72,6 +72,13 @@ export const navigation: {
   },
   { href: "/guide", label: "使い方ガイド", icon: "book", group: "サポート" },
 ];
+/** 経費精算の申請メンバーでもある提出者に、足すメニュー。 */
+export const submitterClaimsEntry: (typeof navigation)[number] = {
+  href: "/claims",
+  label: "経費を申請する",
+  icon: "wallet",
+  group: "提出",
+};
 /** 提出者（業務委託）に見せるメニュー。会社のデータの画面は、一切出さない。 */
 export const submitterNavigation: typeof navigation = [
   { href: "/submit", label: "書類を提出する", icon: "invoice", group: "提出" },
@@ -94,12 +101,20 @@ export function SidebarContent(props: {
   showAdmin: boolean;
   canEdit?: boolean;
   submitter?: boolean;
+  /** 提出者のうち、経費精算の申請メンバーでもある人 */
+  claims?: boolean;
   memberRole?: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const entries = props.submitter
-    ? submitterNavigation
+    ? props.claims
+      ? [
+          submitterNavigation[0],
+          submitterClaimsEntry,
+          ...submitterNavigation.slice(1),
+        ]
+      : submitterNavigation
     : navigation.filter((n) => props.showAdmin || n.href !== "/admin/users");
   return (
     <div className="flex h-full flex-col px-5 pb-5 pt-8">
@@ -192,6 +207,7 @@ export function AppSidebar(props: {
   showAdmin: boolean;
   canEdit?: boolean;
   submitter?: boolean;
+  claims?: boolean;
   memberRole?: string;
 }) {
   return (

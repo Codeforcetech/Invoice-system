@@ -10,6 +10,7 @@ export function MobileAppHeader({
   showAdmin = false,
   canEdit = true,
   submitter = false,
+  claims = false,
   memberRole,
   unreadNotifications = 0,
 }: {
@@ -17,6 +18,7 @@ export function MobileAppHeader({
   showAdmin?: boolean;
   canEdit?: boolean;
   submitter?: boolean;
+  claims?: boolean;
   memberRole?: string;
   unreadNotifications?: number;
 }) {
@@ -107,6 +109,7 @@ export function MobileAppHeader({
           showAdmin={showAdmin}
           canEdit={canEdit}
           submitter={submitter}
+          claims={claims}
           memberRole={memberRole}
           onNavigate={() => setOpen(false)}
         />

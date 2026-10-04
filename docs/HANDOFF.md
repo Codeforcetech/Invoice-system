@@ -275,3 +275,15 @@ AI が書いたコードなので、特に次を見てほしい（金額・権�
 - 本番ビルドでのサーバーの応答は、各画面 15〜50ミリ秒（開発サーバーは60〜200ミリ秒で、初めて開く画面は、コード変換のため2秒近くかかる）。**開発サーバーの遅さは、本番では起きない。**
 - 本番では、データベースが遠い（別のサーバー）と、1回の問い合わせごとに待ちが入る。今後、画面を作るときは、互いに関係のない問い合わせは `Promise.all` で同時に行うこと。
 - ローカルで本番と同じ速さで動かす：`../work/accounting-dev/start-prod.cjs`（ビルドしてから起動。http://127.0.0.1:8771）。
+
+
+### 使い方ガイド（対象者別・画面写真つき）
+
+- `/guide?for=admin|staff|applicant|contractor`（管理者／承認・経理／経費の申請者／業務委託の方）。開いた人の権限から、初めの対象者を自動で選ぶ。手順は `src/app/(app)/guide/guides.ts`、画面は `page.tsx`。項目は押すと開く形式（`<details data-guide>`）のまま。
+- 各手順の写真は `public/guide/<ID>.webp`。写真の赤い番号が、手順の①②…に対応する。写真はすべて架空の見本データの画面（実在の個人・会社の情報は含まない）。
+- 画面を変えたら、写真を撮り直す（`scripts/guide/`）:
+  1. 見本DB（本番と別の空のDB）を用意し、`GUIDE_SEED=1 DATABASE_URL=<見本DB> AUTH_SECRET=<開発用> npx vitest run tests/guide-seed.test.ts`（見本DBの中身を消して、見本データを作る。**本番・開発のDBでは実行しない**）。
+  2. 見本DBに接続した本番ビルドのサーバーを起動する（既定 http://127.0.0.1:8774。`ANTHROPIC_API_KEY` に適当な値を入れると、AI入力の欄も写る）。
+  3. `node scripts/guide/capture.mjs [撮影ID ...]`（省略で全部）。撮影の指定は `scripts/guide/shots.mjs`。環境変数 `GUIDE_BASE`・`AUTH_SECRET`。
+- 手順を変えたら、`tests/guide.test.ts`（リンク先の存在・写真の存在・代替テキスト）が通ること。
+- 外部リンクの提出ページ（`/s/{token}`）の下にも、短い手順の案内を出している。

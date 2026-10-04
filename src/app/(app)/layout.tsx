@@ -8,9 +8,11 @@ import { NavigationProgress } from "@/components/app-shell/navigation-progress";
 export default async function AppLayout(props: { children: React.ReactNode }) {
   const user = await requireUser();
   // 未読件数と事業所の確認は、互いに待たずに同時に行う。
-  const [unreadNotifications, ws] = await Promise.all([
+  const [unreadNotifications, ws, claimMemberships] = await Promise.all([
     prisma.appNotification.count({ where: { userId: user.id, readAt: null } }),
     workspaceOf(user.id),
+    // 提出者が、経費精算の申請メンバーでもあるか（メニューに「経費を申請する」を出す）。
+    prisma.claimMember.count({ where: { userId: user.id, active: true } }),
   ]);
   const canEdit = hasRole(ws.role, "EDITOR");
   const submitter = ws.role === "SUBMITTER";
@@ -29,6 +31,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
         showAdmin={user.role === "ADMIN" && !submitter}
         canEdit={canEdit}
         submitter={submitter}
+        claims={claimMemberships > 0}
         memberRole={memberRole}
       />
       <div className="min-w-0 lg:pl-[232px]">
@@ -37,6 +40,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
           showAdmin={user.role === "ADMIN" && !submitter}
           canEdit={canEdit}
           submitter={submitter}
+          claims={claimMemberships > 0}
           memberRole={memberRole}
           unreadNotifications={unreadNotifications}
         />

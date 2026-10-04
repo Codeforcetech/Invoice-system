@@ -112,6 +112,22 @@ export default async function SubmitViaLinkPage({
             ))}
           </section>
         )}
+        <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+          <summary className="cursor-pointer font-medium">
+            はじめての方へ：提出の手順
+          </summary>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 leading-7 text-slate-700">
+            <li>
+              請求書のPDFや写真がある場合は、「請求書のPDF・写真から入力する（AI）」で選ぶと、内容が自動で入ります（必ず、内容を確認してください）。
+            </li>
+            <li>「あなたの情報」に、お名前・振込先などを入力します。</li>
+            <li>「請求の内容」に、報酬や交通費を入力します。</li>
+            <li>交通費などの領収書があれば、ファイルを添付します。</li>
+            <li>
+              いちばん下の「提出する」を押すと、完了です。承認される前なら、「取り下げて直す」で直して出し直せます。
+            </li>
+          </ol>
+        </details>
         <p className="text-xs leading-relaxed text-slate-500">
           入力した内容と添付したファイルは、提出先に送られ、保存されます。ご不明な点は、このリンクを送ってきた方にお問い合わせください。
         </p>
