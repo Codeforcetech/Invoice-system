@@ -4,6 +4,7 @@ import { purgeAudit } from "./audit-cleanup";
 import {
   normalizeSender,
   notYetThisMonth,
+  buildReceiptPackage,
   receivedRows,
   shiftMonthText,
   summarizeBySender,
@@ -267,6 +268,47 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
           )
         ).map((r) => r.sender),
       ).toEqual(["10月の請求"]);
+    });
+    it("builds a month-end package: folders, readable file names, and an index that also lists documents without a file", async () => {
+      const pack = await buildReceiptPackage(
+        prisma,
+        { ownerId: owner, userId: owner },
+        "2026-09",
+        { includeInvoices: true },
+      );
+      const names = pack.entries.map((e) => e.name).sort();
+      expect(names).toContain("一覧.csv");
+      expect(names).toContain("領収書/山田太郎_2026-09_1200円.pdf");
+      expect(names).toContain("請求書/佐藤デザイン_2026-09_110000円.pdf");
+      expect(names).toContain("領収書/証憑の店_2026-09_3000円.pdf");
+      expect(pack.files).toBe(3);
+      expect(pack.withoutFile).toBe(1);
+      const index = new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+        pack.entries.find((e) => e.name === "一覧.csv")!.data,
+      );
+      expect(index.startsWith("\uFEFF")).toBe(true);
+      expect(index).toContain("添付なし商店");
+      expect(index).toContain("添付なし");
+      expect(index).toContain("領収書（経費精算）");
+    });
+    it("can leave invoices out, and never includes other months or workspaces", async () => {
+      const only = await buildReceiptPackage(
+        prisma,
+        { ownerId: owner, userId: owner },
+        "2026-09",
+        { includeInvoices: false },
+      );
+      expect(only.entries.some((e) => e.name.startsWith("請求書/"))).toBe(
+        false,
+      );
+      expect(only.files).toBe(2);
+      const none = await buildReceiptPackage(
+        prisma,
+        { ownerId: stranger, userId: stranger },
+        "2026-09",
+        { includeInvoices: true },
+      );
+      expect(none.files).toBe(0);
     });
     it("shows other workspaces nothing", async () => {
       expect(

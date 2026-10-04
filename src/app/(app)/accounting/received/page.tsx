@@ -121,6 +121,33 @@ export default async function ReceivedPage({
         ))}
       </div>
 
+      <Card>
+        <CardSection>
+          <h2 className="font-semibold">
+            月末で締めて、まとめて出力（税理士へ渡す用）
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            {month.replace("-", "年")}
+            月分の書類のファイルを、1つのZIPにまとめます。「領収書」「請求書」のフォルダに分け、ファイル名は「送ってきた人_月_金額」です。添付のない書類も、中の「一覧.csv」に残ります。
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <AppButtonLink href={`/api/accounting/receipts-zip?month=${month}`}>
+              領収書と請求書をZIPで出力
+            </AppButtonLink>
+            <AppButtonLink
+              href={`/api/accounting/receipts-zip?month=${month}&invoices=0`}
+              variant="secondary"
+            >
+              領収書だけをZIPで出力
+            </AppButtonLink>
+            <span className="text-xs text-slate-500">
+              ファイルのある書類：{rows.filter((r) => r.hasFile).length}件 ／
+              添付なし：{rows.filter((r) => !r.hasFile).length}件
+            </span>
+          </div>
+        </CardSection>
+      </Card>
+
       {waiting.length > 0 && !nq && (
         <div
           role="status"
