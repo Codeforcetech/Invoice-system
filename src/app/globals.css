@@ -92,3 +92,12 @@ body {
     font-size: 16px;
   }
 }
+
+/* 画面を切り替えている間は、いまの画面を少しだけ薄くして、押したことが伝わるようにする。 */
+html[data-navigating="1"] #main-content {
+  opacity: 0.72;
+  transition: opacity 150ms ease-out;
+}
+#main-content {
+  transition: opacity 120ms ease-out;
+}

@@ -57,8 +57,8 @@ export async function monthlyRows(
     months.push(m);
   const rows: MonthlyRow[] = [];
 
-  // --- 売上（入金月） ---
-  const invoices = await db.invoice.findMany({
+  // 4つの問い合わせは、互いに待たずに、同時に行う。
+  const invoicesQ = db.invoice.findMany({
     where: {
       createdById: ws.ownerId,
       status: "ISSUED",
@@ -78,26 +78,7 @@ export async function monthlyRows(
     orderBy: { receivedDate: "asc" },
     take: 2000,
   });
-  for (const i of invoices) {
-    const date = dateText(i.receivedDate!);
-    rows.push({
-      key: `invoice:${i.id}`,
-      kind: "SALES",
-      date,
-      month: date.slice(0, 7),
-      party: i.company.name,
-      content: `${i.invoiceNumber} ${i.subject}`,
-      source: "請求書",
-      gross: i.totalWithTax,
-      tax: i.taxAmount,
-      net: i.subtotal,
-      taxUnknown: false,
-      href: `/invoices/${i.id}`,
-    });
-  }
-
-  // --- 費用：支払管理 ---
-  const expenses = await db.expense.findMany({
+  const expensesQ = db.expense.findMany({
     where:
       basis === "paid"
         ? { userId: ws.ownerId, paidDate: { gte, lt } }
@@ -113,24 +94,7 @@ export async function monthlyRows(
     },
     take: 2000,
   });
-  for (const e of expenses) {
-    const date = basis === "paid" ? dateText(e.paidDate!) : `${e.costMonth}-01`;
-    rows.push({
-      key: `expense:${e.id}`,
-      kind: "COST",
-      date,
-      month: date.slice(0, 7),
-      party: e.supplier,
-      content: e.description,
-      source: "支払管理",
-      gross: e.amount,
-      ...split(e.amount, e.taxCategory),
-      href: `/expenses/${e.id}/edit`,
-    });
-  }
-
-  // --- 費用：経費精算（承認済み・精算済み） ---
-  const claims = await db.expenseClaim.findMany({
+  const claimsQ = db.expenseClaim.findMany({
     where: {
       AND: [
         visibleClaimWhere(ws.userId),
@@ -153,24 +117,7 @@ export async function monthlyRows(
     },
     take: 2000,
   });
-  for (const c of claims) {
-    const date = dateText(basis === "paid" ? c.paidDate! : c.date);
-    rows.push({
-      key: `claim:${c.id}`,
-      kind: "COST",
-      date,
-      month: date.slice(0, 7),
-      party: c.merchant,
-      content: `${c.title}（申請：${c.applicant.name}）`,
-      source: "経費精算",
-      gross: c.amount,
-      ...split(c.amount, null),
-      href: `/claims/${c.id}`,
-    });
-  }
-
-  // --- 売上・費用：手入力・明細取込の記録 ---
-  const lines = await db.journalLine.findMany({
+  const linesQ = db.journalLine.findMany({
     where: {
       userId: ws.ownerId,
       account: { kind: { in: ["EXPENSE", "REVENUE"] } },
@@ -191,6 +138,67 @@ export async function monthlyRows(
     },
     take: 4000,
   });
+  const [invoices, expenses, claims, lines] = await Promise.all([
+    invoicesQ,
+    expensesQ,
+    claimsQ,
+    linesQ,
+  ]);
+
+  // --- 売上（入金月） ---
+  for (const i of invoices) {
+    const date = dateText(i.receivedDate!);
+    rows.push({
+      key: `invoice:${i.id}`,
+      kind: "SALES",
+      date,
+      month: date.slice(0, 7),
+      party: i.company.name,
+      content: `${i.invoiceNumber} ${i.subject}`,
+      source: "請求書",
+      gross: i.totalWithTax,
+      tax: i.taxAmount,
+      net: i.subtotal,
+      taxUnknown: false,
+      href: `/invoices/${i.id}`,
+    });
+  }
+
+  // --- 費用：支払管理 ---
+  for (const e of expenses) {
+    const date = basis === "paid" ? dateText(e.paidDate!) : `${e.costMonth}-01`;
+    rows.push({
+      key: `expense:${e.id}`,
+      kind: "COST",
+      date,
+      month: date.slice(0, 7),
+      party: e.supplier,
+      content: e.description,
+      source: "支払管理",
+      gross: e.amount,
+      ...split(e.amount, e.taxCategory),
+      href: `/expenses/${e.id}/edit`,
+    });
+  }
+
+  // --- 費用：経費精算（承認済み・精算済み） ---
+  for (const c of claims) {
+    const date = dateText(basis === "paid" ? c.paidDate! : c.date);
+    rows.push({
+      key: `claim:${c.id}`,
+      kind: "COST",
+      date,
+      month: date.slice(0, 7),
+      party: c.merchant,
+      content: `${c.title}（申請：${c.applicant.name}）`,
+      source: "経費精算",
+      gross: c.amount,
+      ...split(c.amount, null),
+      href: `/claims/${c.id}`,
+    });
+  }
+
+  // --- 売上・費用：手入力・明細取込の記録 ---
   const cancelled = lines.length
     ? new Set(
         (

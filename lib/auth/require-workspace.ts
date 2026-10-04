@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { requireUser } from "@/lib/auth/require-user";
@@ -10,6 +11,11 @@ import {
   type WorkspaceRole,
 } from "@/lib/workspace/access";
 
+/** 事業所（役割）の確認。同じ画面の表示の中では、1回だけ問い合わせる。 */
+export const workspaceOf = cache((userId: string) =>
+  resolveWorkspace(prisma, userId),
+);
+
 /**
  * For server actions and route handlers. Resolves the acting user's workspace and
  * throws a PermissionError when their role is below `minimum`.
@@ -17,7 +23,7 @@ import {
  */
 export async function requireWorkspace(minimum: WorkspaceRole = "VIEWER") {
   const user = await requireUser();
-  const ctx = await resolveWorkspace(prisma, user.id);
+  const ctx = await workspaceOf(user.id);
   assertRole(ctx, minimum);
   return { user, ...ctx };
 }
@@ -25,7 +31,7 @@ export async function requireWorkspace(minimum: WorkspaceRole = "VIEWER") {
 /** For pages: send users who lack the role back to the dashboard instead of erroring. */
 export async function requireWorkspacePage(minimum: WorkspaceRole = "VIEWER") {
   const user = await requireUser();
-  const ctx = await resolveWorkspace(prisma, user.id);
+  const ctx = await workspaceOf(user.id);
   try {
     assertRole(ctx, minimum);
   } catch (e) {

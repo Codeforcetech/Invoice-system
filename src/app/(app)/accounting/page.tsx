@@ -24,13 +24,14 @@ export default async function AccountingPage({
   const sp = await searchParams;
   const str = (k: string) =>
     typeof sp[k] === "string" ? (sp[k] as string) : "";
-  const setting = await prisma.accountingSetting.findUnique({
-    where: { userId: ws.ownerId },
-  });
-  const accounts = await prisma.account.findMany({
-    where: { userId: ws.ownerId },
-    orderBy: { code: "asc" },
-  });
+  // 互いに待たずに、同時に問い合わせる。
+  const [setting, accounts] = await Promise.all([
+    prisma.accountingSetting.findUnique({ where: { userId: ws.ownerId } }),
+    prisma.account.findMany({
+      where: { userId: ws.ownerId },
+      orderBy: { code: "asc" },
+    }),
+  ]);
   const view = [
     "money",
     "journal",
@@ -61,25 +62,26 @@ export default async function AccountingPage({
     } catch (e) {
       error = e instanceof Error ? e.message : "帳簿を表示できませんでした。";
     }
-  const reversals = report
-    ? await prisma.journalEntry.findMany({
-        where: {
-          userId: ws.ownerId,
-          reversalOf: { in: report.entries.map((e) => e.id) },
-        },
-        select: { reversalOf: true },
-      })
-    : [];
+  // 取消の確認・開始残高・取込口座は、互いに関係がないので、同時に問い合わせる。
+  const [reversals, openingDone, feeds] = await Promise.all([
+    report
+      ? prisma.journalEntry.findMany({
+          where: {
+            userId: ws.ownerId,
+            reversalOf: { in: report.entries.map((e) => e.id) },
+          },
+          select: { reversalOf: true },
+        })
+      : Promise.resolve([] as { reversalOf: string | null }[]),
+    setting ? hasOpeningBalance(prisma, ws.ownerId) : Promise.resolve(true),
+    setting
+      ? prisma.statementFeed.findMany({
+          where: { userId: ws.ownerId },
+          select: { accountId: true },
+        })
+      : Promise.resolve([] as { accountId: string }[]),
+  ]);
   const reversed = new Set(reversals.map((e) => e.reversalOf));
-  const openingDone = setting
-    ? await hasOpeningBalance(prisma, ws.ownerId)
-    : true;
-  const feeds = setting
-    ? await prisma.statementFeed.findMany({
-        where: { userId: ws.ownerId },
-        select: { accountId: true },
-      })
-    : [];
   const moneyIds = new Set([
     ...accounts
       .filter((a) => a.code === "100" || a.code === "110")

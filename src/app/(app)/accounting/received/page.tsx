@@ -36,23 +36,23 @@ export default async function ReceivedPage({
   const raw = typeof sp.month === "string" ? sp.month : "";
   const month = validMonthText(raw) ? raw : japanToday().slice(0, 7);
   const q = (typeof sp.q === "string" ? sp.q : "").trim().slice(0, 60);
-  const [rows, previous] = await Promise.all([
+  const [rows, previous, pendingSubmissions] = await Promise.all([
     receivedRows(prisma, ws, month),
     receivedRows(prisma, ws, shiftMonthText(month, -1)),
+    prisma.submission.findMany({
+      where: { ownerId: ws.ownerId, status: "SUBMITTED" },
+      orderBy: { submittedAt: "asc" },
+      take: 20,
+      select: {
+        id: true,
+        month: true,
+        total: true,
+        senderName: true,
+        submitter: { select: { name: true } },
+        link: { select: { label: true } },
+      },
+    }),
   ]);
-  const pendingSubmissions = await prisma.submission.findMany({
-    where: { ownerId: ws.ownerId, status: "SUBMITTED" },
-    orderBy: { submittedAt: "asc" },
-    take: 20,
-    select: {
-      id: true,
-      month: true,
-      total: true,
-      senderName: true,
-      submitter: { select: { name: true } },
-      link: { select: { label: true } },
-    },
-  });
   const nq = normalizeSender(q);
   const shown = nq
     ? rows.filter((r) => normalizeSender(r.sender).includes(nq))
