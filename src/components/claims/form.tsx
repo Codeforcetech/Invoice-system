@@ -173,6 +173,10 @@ export function ClaimForm({
             const f = new FormData(e.currentTarget);
             f.set("id", id);
             f.set("ownerId", ownerId);
+            // ファイルを選んでいないときは、空のファイルを送らない。
+            const picked = f.get("receipt");
+            if (picked instanceof File && picked.size === 0)
+              f.delete("receipt");
             if (data) f.set("version", data.version);
             setBusy(true);
             setError("");

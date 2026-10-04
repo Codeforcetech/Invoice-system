@@ -151,7 +151,9 @@ export function SubmissionForm({
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return;
-    setFresh((f) => [...f, ...Array.from(list)].slice(0, MAX_SUBMISSION_FILES));
+    // 選んだファイルは、いまのうちにコピーする（入力欄を空にすると、FileListも空になるため）。
+    const picked = Array.from(list);
+    setFresh((f) => [...f, ...picked].slice(0, MAX_SUBMISSION_FILES));
   };
 
   const isBlankRow = (r: Row) => !r.name.trim() && !r.unitPrice.trim();

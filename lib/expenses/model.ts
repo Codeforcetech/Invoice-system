@@ -62,8 +62,12 @@ export const expenseSchema = z.object({
     ),
   note: z.string().trim().max(2000),
   /** 売上管理表で、どの取引先（と店舗）の費用か。未指定は取引先なし */
-  companyId: z.preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable()).optional(),
-  storeId: z.preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable()).optional(),
+  companyId: z
+    .preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable())
+    .optional(),
+  storeId: z
+    .preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable())
+    .optional(),
   removeAttachment: z.boolean().default(false),
 });
 export type ExpenseInput = z.input<typeof expenseSchema>;
@@ -90,7 +94,9 @@ export function expenseStatus(
   return row.paidDate ? "PAID" : row.dueDate < today ? "OVERDUE" : "UNPAID";
 }
 export async function readExpensePdf(file: File | null) {
-  if (!file || (!file.name && file.size === 0)) return null;
+  // ファイルを選んでいないとき、ブラウザは空のファイルを送る。サーバーに届くと名前が "blob" になる。
+  if (!file || (file.size === 0 && (!file.name || file.name === "blob")))
+    return null;
   if (file.size === 0) throw new Error("PDFファイルが空です。");
   if (file.size > MAX_EXPENSE_PDF_BYTES)
     throw new Error("PDFは3MB以内で添付してください。");

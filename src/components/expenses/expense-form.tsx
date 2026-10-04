@@ -45,6 +45,9 @@ export function ExpenseForm({
           const form = new FormData(e.currentTarget);
           if (!id.current) id.current = crypto.randomUUID();
           form.set("id", id.current);
+          // ファイルを選んでいないときは、空のファイルを送らない。
+          const pdf = form.get("pdf");
+          if (pdf instanceof File && pdf.size === 0) form.delete("pdf");
           if (expense) form.set("version", expense.version);
           if (!paid) form.set("paidDate", "");
           form.set("removeAttachment", String(removePdf));

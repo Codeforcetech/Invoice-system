@@ -1,7 +1,9 @@
 import sharp from "sharp";
 import { readExpensePdf } from "@/lib/expenses/model";
 export async function readClaimReceipt(file: File | null) {
-  if (!file || (!file.name && !file.size)) return null;
+  // ファイルを選んでいないとき、ブラウザは空のファイルを送る。サーバーに届くと名前が "blob" になる。
+  if (!file || (!file.size && (!file.name || file.name === "blob")))
+    return null;
   if (!file.size || file.size > 3 * 1024 * 1024)
     throw new Error(
       "レシートは空でない3MB以内のPDF・JPEG・PNG・WebPを選択してください。",
