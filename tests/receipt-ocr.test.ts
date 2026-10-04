@@ -198,7 +198,7 @@ describe("readReceiptWithAi", () => {
   });
 
   it("opens again after the cool-down, and a success clears the failure count", async () => {
-    let t = 5_000_000;
+    const t = 5_000_000;
     const bad = status(503);
     for (let i = 0; i < 3; i++) await call(bad, { now: () => t });
     const idle = reply('{"amount":10}');
