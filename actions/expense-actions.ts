@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { requireWorkspace } from "@/lib/auth/require-workspace";
 import { recordAudit } from "@/lib/workspace/audit";
+import { resolveExpenseLink } from "@/lib/stores";
 import { PermissionError } from "@/lib/workspace/access";
 import {
   expenseSchema,
@@ -18,6 +19,8 @@ const select = {
   description: true,
   category: true,
   taxCategory: true,
+  companyId: true,
+  storeId: true,
   amount: true,
   costMonth: true,
   dueDate: true,
@@ -76,8 +79,16 @@ export async function saveExpense(
       ok: false,
       error: parsed.error.issues[0]?.message ?? "入力内容を確認してください。",
     };
-  const { id, version, removeAttachment, paidDate, dueDate, ...values } =
-    parsed.data;
+  const {
+    id,
+    version,
+    removeAttachment,
+    paidDate,
+    dueDate,
+    companyId,
+    storeId,
+    ...values
+  } = parsed.data;
   try {
     if (version) {
       const owned = await prisma.expense.findFirst({
@@ -96,8 +107,15 @@ export async function saveExpense(
     const attachment = await readExpensePdf(
       value instanceof File ? value : null,
     );
+    let link: Awaited<ReturnType<typeof resolveExpenseLink>>;
+    try {
+      link = await resolveExpenseLink(prisma, ws.ownerId, companyId, storeId);
+    } catch {
+      return { ok: false, error: "取引先・店舗の選択を確認してください。" };
+    }
     const data = {
       ...values,
+      ...link,
       dueDate: new Date(dueDate),
       paidDate: paidDate ? new Date(paidDate) : null,
     };

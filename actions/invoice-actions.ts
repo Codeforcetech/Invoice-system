@@ -1,5 +1,6 @@
 "use server";
 
+import { allowedStoreIds } from "@/lib/stores";
 import { accountingLock } from "@/lib/accounting/service";
 import { syncInvoice } from "@/lib/accounting/sync";
 import { japanToday } from "@/lib/expenses/model";
@@ -54,9 +55,25 @@ function buildNormalizedItems(input: InvoiceUpsertInput) {
       amount: toYenInt(amount),
       amountManuallyEdited: it.amountManuallyEdited,
       taxCategory: it.taxCategory ?? null,
+      storeId: it.storeId ?? null,
       note: it.note ?? null,
     };
   });
+}
+
+/** 明細の店舗は、その取引先の店舗だけを認める（ほかは「店舗なし」にする）。 */
+async function onlyOwnStores<T extends { storeId: string | null }>(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  companyId: string,
+  items: T[],
+): Promise<T[]> {
+  if (!items.some((it) => it.storeId)) return items;
+  const ok = await allowedStoreIds(tx, ownerId, companyId);
+  return items.map((it) => ({
+    ...it,
+    storeId: it.storeId && ok.has(it.storeId) ? it.storeId : null,
+  }));
 }
 
 function buildCalc(
@@ -193,6 +210,7 @@ export async function getInvoice(params: { invoiceId: string }) {
           amount: true,
           amountManuallyEdited: true,
           taxCategory: true,
+          storeId: true,
           note: true,
         },
       },
@@ -224,7 +242,12 @@ export async function createInvoice(raw: unknown) {
       });
       if (!company) throw new Error("FORBIDDEN_COMPANY");
 
-      const normalizedItems = buildNormalizedItems(input);
+      const normalizedItems = await onlyOwnStores(
+        tx,
+        ws.ownerId,
+        input.companyId,
+        buildNormalizedItems(input),
+      );
       const calc = buildCalc(
         normalizedItems,
         taxRateBps,
@@ -325,7 +348,12 @@ export async function updateInvoice(params: {
     });
     if (!company) throw new Error("FORBIDDEN_COMPANY");
 
-    const normalizedItems = buildNormalizedItems(input);
+    const normalizedItems = await onlyOwnStores(
+      tx,
+      ws.ownerId,
+      input.companyId,
+      buildNormalizedItems(input),
+    );
     const calc = buildCalc(
       normalizedItems,
       taxRateBps,
@@ -458,6 +486,7 @@ export async function duplicateInvoice(params: {
         amount: it.amount,
         amountManuallyEdited: it.amountManuallyEdited,
         taxCategory: it.taxCategory,
+        storeId: it.storeId,
         note: it.note,
       }));
 

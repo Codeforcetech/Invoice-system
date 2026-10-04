@@ -26,6 +26,10 @@ const companyFormSelect = {
   billingCcEmail: true,
   createdAt: true,
   updatedAt: true,
+  stores: {
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, active: true },
+  },
 } satisfies Prisma.CompanySelect;
 
 export async function listCompanies(params: { q?: string } = {}) {

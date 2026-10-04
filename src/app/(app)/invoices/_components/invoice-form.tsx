@@ -68,6 +68,7 @@ const emptyItem = (price = 0) => ({
   unitPrice: price,
   amount: price,
   amountManuallyEdited: false,
+  storeId: "",
   note: "",
 });
 function dateValue(value: Date | string | undefined) {
@@ -208,6 +209,14 @@ export function InvoiceForm(props: {
     previousCompany.current = company.id;
     if (!form.getValues("subject").trim() && company.commonSubject)
       form.setValue("subject", company.commonSubject, { shouldValidate: true });
+  }, [company, form]);
+  // 取引先を変えたら、その取引先にない店舗の選択は外す。
+  useEffect(() => {
+    const ids = new Set((company?.stores ?? []).map((s) => s.id));
+    form.getValues("items").forEach((it, i) => {
+      if (it.storeId && !ids.has(it.storeId))
+        form.setValue(`items.${i}.storeId`, null);
+    });
   }, [company, form]);
   const issueDateKey = dateValue(snapshot.issueDate);
   useEffect(() => {
@@ -789,6 +798,40 @@ export function InvoiceForm(props: {
                       </select>
                     </Field>
                   </div>
+                  {company && company.stores.length > 0 && (
+                    <div className="mt-3">
+                      <Field
+                        id={`item-${idx}-storeId`}
+                        label="店舗（売上管理表の行）"
+                      >
+                        <select
+                          id={`item-${idx}-storeId`}
+                          className={inputClass}
+                          value={values.items[idx]?.storeId ?? ""}
+                          onChange={(e) =>
+                            form.setValue(
+                              `items.${idx}.storeId`,
+                              e.target.value || null,
+                              { shouldDirty: true },
+                            )
+                          }
+                        >
+                          <option value="">店舗を指定しない</option>
+                          {company.stores
+                            .filter(
+                              (s) =>
+                                s.active || s.id === values.items[idx]?.storeId,
+                            )
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                                {s.active ? "" : "（使わない）"}
+                              </option>
+                            ))}
+                        </select>
+                      </Field>
+                    </div>
+                  )}
                   <div className="mt-2 text-right text-[11px]">
                     {values.items[idx]?.amountManuallyEdited ? (
                       <button

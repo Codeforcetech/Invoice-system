@@ -157,9 +157,28 @@ model Company {
   user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   invoices       Invoice[]
   sequences      InvoiceNumberSequence[]
+  stores         Store[]
+  expenses       Expense[]
 
   @@unique([userId, invoiceCode])
   @@index([userId])
+}
+
+/// 取引先ごとの店舗（部門）。売上管理表の行になる。使わない取引先は、店舗なしのまま。
+model Store {
+  id        String        @id @default(cuid())
+  companyId String
+  name      String
+  sortOrder Int           @default(0)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  company   Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items     InvoiceItem[]
+  expenses  Expense[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Invoice {
@@ -211,12 +230,16 @@ model InvoiceItem {
   /// 消費税区分。null は請求書の税率を引き継ぐ（従来動作）
   taxCategory          String?
   note                 String?
+  /// 売上管理表で、どの店舗の売上にするか（取引先の店舗）。null は店舗なし
+  storeId              String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   invoice              Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  store                Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@unique([invoiceId, sortOrder])
   @@index([invoiceId])
+  @@index([storeId])
 }
 
 /// ユーザーごとの明細テンプレート（よく使う行をワンクリック追加）
@@ -318,7 +341,14 @@ model Expense {
   /// 業務委託メンバーの提出を承認して作られた支払いのとき、その提出
   submissionId String?
   submission   Submission?        @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  /// 売上管理表で、どの取引先（と店舗）の費用にするか。null は取引先の指定なし
+  companyId    String?
+  storeId      String?
+  company      Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  store        Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
+  @@index([companyId])
+  @@index([storeId])
   @@index([userId, costMonth])
   @@index([submissionId])
   @@index([userId, paidDate, dueDate])

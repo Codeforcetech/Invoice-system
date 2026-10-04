@@ -204,6 +204,11 @@ export default async function AccountingPage({
               </AppButtonLink>
             )}
             {hasRole(ws.role, "APPROVER") && (
+              <AppButtonLink href="/accounting/sales-table" variant="secondary">
+                売上管理表
+              </AppButtonLink>
+            )}
+            {hasRole(ws.role, "APPROVER") && (
               <AppButtonLink href="/accounting/links" variant="secondary">
                 提出リンク
               </AppButtonLink>

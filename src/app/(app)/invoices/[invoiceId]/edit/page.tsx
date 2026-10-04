@@ -98,6 +98,7 @@ export default async function EditInvoicePage(props: {
               amount: it.amount,
               amountManuallyEdited: it.amountManuallyEdited,
               taxCategory: it.taxCategory as InvoiceUpsertInput["items"][number]["taxCategory"],
+              storeId: it.storeId ?? "",
               note: it.note ?? "",
             })),
           }}

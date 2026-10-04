@@ -61,6 +61,9 @@ export const expenseSchema = z.object({
       "支払日は今日以前の日付を指定してください",
     ),
   note: z.string().trim().max(2000),
+  /** 売上管理表で、どの取引先（と店舗）の費用か。未指定は取引先なし */
+  companyId: z.preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable()).optional(),
+  storeId: z.preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable()).optional(),
   removeAttachment: z.boolean().default(false),
 });
 export type ExpenseInput = z.input<typeof expenseSchema>;
@@ -70,6 +73,8 @@ export type ExpenseRow = {
   description: string;
   category: string;
   taxCategory?: string | null;
+  companyId?: string | null;
+  storeId?: string | null;
   amount: number;
   costMonth: string;
   dueDate: string;

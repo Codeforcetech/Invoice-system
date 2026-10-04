@@ -1,6 +1,7 @@
 import { getCompany } from "@/actions/company-actions";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { hasRole } from "@/lib/workspace/access";
+import { StoreManager } from "@/components/stores/store-manager";
 import { CompanyForm } from "@/app/(app)/companies/_components/company-form";
 import { AppButtonLink } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
@@ -66,6 +67,15 @@ export default async function CompanyDetailPage(props: {
               billingEmail: company.billingEmail ?? "",
               billingCcEmail: company.billingCcEmail ?? "",
             }}
+          />
+        </CardSection>
+      </Card>
+      <Card>
+        <CardSection>
+          <StoreManager
+            companyId={company.id}
+            stores={company.stores}
+            canEdit={hasRole(ws.role, "EDITOR")}
           />
         </CardSection>
       </Card>

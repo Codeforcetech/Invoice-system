@@ -34,6 +34,10 @@ export const invoiceItemInputSchema = z.object({
   taxCategory: z
     .preprocess((v) => (v === "" ? null : v), z.enum(TAX_CATEGORIES).nullable())
     .optional(),
+  /** 売上管理表の店舗（取引先の店舗）。空は店舗なし */
+  storeId: z
+    .preprocess((v) => (v === "" ? null : v), z.string().max(60).nullable())
+    .optional(),
   note: z
     .string()
     .max(1000, "明細備考は1,000文字以内で入力してください")

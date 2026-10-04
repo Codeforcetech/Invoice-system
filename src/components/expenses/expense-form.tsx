@@ -10,9 +10,17 @@ import {
 } from "@/lib/expenses/model";
 import { inputClass, selectClass } from "@/lib/ui/form-classes";
 import { TAX_CATEGORIES, taxCategoryInfo } from "@/lib/tax/categories";
+import { CompanyStoreSelect } from "@/components/stores/company-store-select";
+import type { CompanyWithStores } from "@/lib/stores";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
-export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
+export function ExpenseForm({
+  expense,
+  companies = [],
+}: {
+  expense?: ExpenseRow;
+  companies?: CompanyWithStores[];
+}) {
   const router = useRouter(),
     id = useRef(expense?.id ?? "");
   const [paid, setPaid] = useState(Boolean(expense?.paidDate));
@@ -118,6 +126,13 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
                   課税仕入などの集計に使います。指定しない支払いは「未設定」として集計します。「交通費」を選ぶと、未指定のときは「非課税」が入ります（あとで変更できます）。
                 </span>
               </label>
+              {companies.length > 0 && (
+                <CompanyStoreSelect
+                  companies={companies}
+                  companyId={expense?.companyId}
+                  storeId={expense?.storeId}
+                />
+              )}
               <label className="text-sm font-medium sm:col-span-2">
                 支払内容 <span className="text-xs text-rose-700">必須</span>
                 <input
