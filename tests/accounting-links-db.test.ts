@@ -217,6 +217,26 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       ).toMatchObject({ ok: true });
       expect(await balances("110")).toBe(0);
     });
+    it("posts a contractor-fee (業務委託報酬) payable to 外注費 and 未払金", async () => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries({
+        id: "83222222-2222-4222-8222-222222222222",
+        supplier: "山田太郎",
+        description: "9月分 業務委託料",
+        category: "業務委託報酬",
+        amount: "110000",
+        costMonth: "2026-09",
+        dueDate: "2026-09-30",
+        paidDate: "",
+        note: "",
+      }))
+        f.set(k, v);
+      const before510 = await balances("510"),
+        before210 = await balances("210");
+      expect(await saveExpense(f)).toMatchObject({ ok: true });
+      expect((await balances("510")) - before510).toBe(110000);
+      expect((await balances("210")) - before210).toBe(-110000);
+    });
     it("generates monthly drafts only once, clamps month-end, and combines drafts without double issuance", async () => {
       const a = await createInvoice(input("DRAFT")),
         b = await createInvoice(input("DRAFT"));

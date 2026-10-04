@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TAX_CATEGORIES } from "@/lib/tax/categories";
-export const EXPENSE_CATEGORIES = [
+/** 領収書・レシートの費用の分類（経費精算・領収書の読み取りで使う） */
+export const RECEIPT_CATEGORIES = [
   "外注費",
   "仕入",
   "家賃",
@@ -9,6 +10,12 @@ export const EXPENSE_CATEGORIES = [
   "交通費",
   "備品・消耗品",
   "その他",
+] as const;
+/** 支払管理の費目。業務委託への報酬の請求書は、経費と区別できるよう専用の費目にする。 */
+export const REWARD_CATEGORY = "業務委託報酬";
+export const EXPENSE_CATEGORIES = [
+  REWARD_CATEGORY,
+  ...RECEIPT_CATEGORIES,
 ] as const;
 export const MAX_EXPENSE_PDF_BYTES = 3 * 1024 * 1024;
 export function japanToday(now = new Date()) {

@@ -170,6 +170,7 @@ export async function syncInvoice(tx: Tx, userId: string, id: string) {
   );
 }
 const expenseCodes: Record<string, string> = {
+  業務委託報酬: "510",
   外注費: "510",
   仕入: "500",
   家賃: "520",

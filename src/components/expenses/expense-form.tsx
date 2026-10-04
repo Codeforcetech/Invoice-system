@@ -82,6 +82,17 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
                 <select
                   name="category"
                   defaultValue={expense?.category ?? "外注費"}
+                  onChange={(e) => {
+                    // 交通費は非課税として扱うことが多いので、区分が未指定なら「非課税」を入れる（変更できる）。
+                    const tax =
+                      e.currentTarget.form?.elements.namedItem("taxCategory");
+                    if (
+                      e.currentTarget.value === "交通費" &&
+                      tax instanceof HTMLSelectElement &&
+                      !tax.value
+                    )
+                      tax.value = "NON_TAXABLE";
+                  }}
                   className={`mt-2 ${selectClass}`}
                 >
                   {EXPENSE_CATEGORIES.map((c) => (
@@ -104,7 +115,7 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
                   ))}
                 </select>
                 <span className="mt-1 block text-xs font-normal text-slate-500">
-                  課税仕入などの集計に使います。指定しない支払いは「未設定」として集計します。
+                  課税仕入などの集計に使います。指定しない支払いは「未設定」として集計します。「交通費」を選ぶと、未指定のときは「非課税」が入ります（あとで変更できます）。
                 </span>
               </label>
               <label className="text-sm font-medium sm:col-span-2">

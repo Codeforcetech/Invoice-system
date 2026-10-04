@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth/session";
 import { resolveWorkspace } from "@/lib/workspace/access";
 import { prisma } from "@/lib/db/prisma";
+import { dispositionName, downloadName } from "@/lib/evidence/download-name";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const headers = {
@@ -24,7 +25,13 @@ export async function GET(
   const ws = await resolveWorkspace(prisma, session.sub);
   const attachment = await prisma.expenseAttachment.findFirst({
     where: { expenseId, expense: { userId: ws.ownerId } },
-    select: { data: true, filename: true },
+    select: {
+      data: true,
+      filename: true,
+      expense: {
+        select: { supplier: true, costMonth: true, description: true },
+      },
+    },
   });
   if (!attachment)
     return Response.json(
@@ -35,7 +42,16 @@ export async function GET(
     headers: {
       ...headers,
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="expense.pdf"; filename*=UTF-8''${encodeURIComponent(attachment.filename).replace(/'/g, "%27")}`,
+      "Content-Disposition": `attachment; ${dispositionName(
+        downloadName(
+          [
+            attachment.expense.supplier,
+            attachment.expense.costMonth,
+            attachment.expense.description,
+          ],
+          "pdf",
+        ),
+      )}`,
     },
   });
 }

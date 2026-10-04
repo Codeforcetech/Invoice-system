@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { daySchema } from "@/lib/accounting/model";
-import { EXPENSE_CATEGORIES, japanToday } from "@/lib/expenses/model";
+import { RECEIPT_CATEGORIES, japanToday } from "@/lib/expenses/model";
 export const claimStatus: Record<string, string> = {
   DRAFT: "下書き",
   PENDING: "承認待ち",
@@ -19,7 +19,7 @@ export const claimSchema = z.object({
     "経費の日付は今日以前にしてください",
   ),
   amount: z.coerce.number().int().min(1).max(2147483647),
-  category: z.enum(EXPENSE_CATEGORIES),
+  category: z.enum(RECEIPT_CATEGORIES),
   note: z.string().trim().max(2000),
   removeReceipt: z.boolean().default(false),
 });

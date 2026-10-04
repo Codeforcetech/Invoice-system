@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { EXPENSE_CATEGORIES, japanToday } from "@/lib/expenses/model";
+import { RECEIPT_CATEGORIES, japanToday } from "@/lib/expenses/model";
 
 /**
  * 領収書の画像・PDFを Claude（既定は Haiku 4.5）で読み取り、日付・金額・支払先・分類を返す。
@@ -15,7 +15,7 @@ export type ReceiptReading = {
   merchant: string;
   date: string;
   amount: number;
-  category: (typeof EXPENSE_CATEGORIES)[number];
+  category: (typeof RECEIPT_CATEGORIES)[number];
   note: string;
 };
 export type ReceiptReadResult =
@@ -25,7 +25,7 @@ export type ReceiptReadResult =
 export const ocrConfigured = () => !!process.env.ANTHROPIC_API_KEY;
 
 const SYSTEM = `あなたは日本の領収書・レシートの読み取り係です。画像または文書から次の項目だけを読み取り、JSONオブジェクト1つだけを返してください。説明文やコードブロックは付けません。
-{"merchant": 支払先（店名・会社名）, "date": "YYYY-MM-DD", "amount": 税込の合計金額（円の整数）, "category": ${EXPENSE_CATEGORIES.map((c) => `"${c}"`).join(" | ")} のどれか, "note": 内容の短い説明（20文字程度）}
+{"merchant": 支払先（店名・会社名）, "date": "YYYY-MM-DD", "amount": 税込の合計金額（円の整数）, "category": ${RECEIPT_CATEGORIES.map((c) => `"${c}"`).join(" | ")} のどれか, "note": 内容の短い説明（20文字程度）}
 - 読み取れない項目は null にします。推測で埋めません。
 - 令和・平成などの和暦は西暦に直します。
 - 金額は「合計」「お買上げ計」など税込の最終金額を選びます。小計、預り金、お釣りは選びません。
@@ -72,7 +72,7 @@ export function normalizeReading(
     amount <= 2147483647
   )
     out.amount = amount;
-  const category = EXPENSE_CATEGORIES.find((c) => c === raw.category);
+  const category = RECEIPT_CATEGORIES.find((c) => c === raw.category);
   if (category) out.category = category;
   const note = raw.note?.replace(/[\r\n\x00-\x1f]/g, " ").trim();
   if (note) out.note = note.slice(0, 100);

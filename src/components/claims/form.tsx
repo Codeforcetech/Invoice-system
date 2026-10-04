@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { readClaimReceiptAi, saveClaim } from "@/actions/claim-actions";
-import { EXPENSE_CATEGORIES, japanToday } from "@/lib/expenses/model";
+import { RECEIPT_CATEGORIES, japanToday } from "@/lib/expenses/model";
 import { Card, CardSection } from "@/components/ui/card";
 import { AppButton } from "@/components/ui/app-button";
 import { inputClass, selectClass, textareaClass } from "@/lib/ui/form-classes";
@@ -208,7 +208,7 @@ export function ClaimForm({
                 defaultValue={data?.category ?? "交通費"}
                 className={`mt-1 ${selectClass}`}
               >
-                {EXPENSE_CATEGORIES.map((c) => (
+                {RECEIPT_CATEGORIES.map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>

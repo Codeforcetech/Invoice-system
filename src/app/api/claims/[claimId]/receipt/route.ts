@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { visibleClaimWhere } from "@/lib/claims/access";
+import { dispositionName, downloadName } from "@/lib/evidence/download-name";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const headers = {
@@ -24,14 +25,34 @@ export async function GET(
   if (!user) return new Response(null, { status: 401, headers });
   const receipt = await prisma.claimReceipt.findFirst({
     where: { claimId, claim: visibleClaimWhere(user.id) },
-    select: { data: true, filename: true, mimeType: true },
+    select: {
+      data: true,
+      filename: true,
+      mimeType: true,
+      claim: {
+        select: {
+          date: true,
+          merchant: true,
+          applicant: { select: { name: true } },
+        },
+      },
+    },
   });
   if (!receipt) return new Response(null, { status: 404, headers });
   return new Response(new Uint8Array(receipt.data), {
     headers: {
       ...headers,
       "Content-Type": receipt.mimeType,
-      "Content-Disposition": `${receipt.mimeType === "image/webp" ? "inline" : "attachment"}; filename="receipt.${receipt.mimeType === "image/webp" ? "webp" : "pdf"}"; filename*=UTF-8''${encodeURIComponent(receipt.filename).replace(/'/g, "%27")}`,
+      "Content-Disposition": `${receipt.mimeType === "image/webp" ? "inline" : "attachment"}; ${dispositionName(
+        downloadName(
+          [
+            receipt.claim.applicant.name,
+            receipt.claim.date.toISOString().slice(0, 10),
+            receipt.claim.merchant,
+          ],
+          receipt.mimeType === "image/webp" ? "webp" : "pdf",
+        ),
+      )}`,
     },
   });
 }

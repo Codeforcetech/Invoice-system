@@ -37,10 +37,21 @@ it("downloads PDFs privately, without executing in the app origin", async () => 
   mock.pdf.mockResolvedValue({
     filename: "請求書.pdf",
     data: new Uint8Array([37, 80, 68, 70]),
+    expense: {
+      supplier: "山田太郎",
+      costMonth: "2026-09",
+      description: "業務委託料",
+    },
   });
   const res = await run();
   expect(res.status).toBe(200);
   expect(res.headers.get("cache-control")).toContain("no-store");
   expect(res.headers.get("content-disposition")).toContain("attachment;");
+  // 誰から・いつ・何のPDFかが、ダウンロード名で分かる。
+  expect(
+    decodeURIComponent(
+      res.headers.get("content-disposition")!.split("UTF-8''")[1],
+    ),
+  ).toBe("山田太郎_2026-09_業務委託料.pdf");
   expect(res.headers.get("content-security-policy")).toContain("sandbox");
 });
