@@ -20,10 +20,11 @@ export default async function ReviewSubmission({
     <PageShell maxWidth="4xl">
       <SectionHeader
         variant="page"
-        title={`${s.senderName || s.submitter.name}さんの提出`}
+        title={`${s.senderName || s.submitter?.name || s.link?.label}さんの提出`}
         description="内容を確認して、承認または差し戻します。承認すると、支払管理に支払い予定として反映されます。"
       />
-      {s.status === "SUBMITTED" && s.submitterId !== ws.userId ? (
+      {s.status === "SUBMITTED" &&
+      (!s.submitterId || s.submitterId !== ws.userId) ? (
         <ReviewActions id={s.id} version={s.updatedAt.toISOString()} />
       ) : s.status === "SUBMITTED" ? (
         <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">

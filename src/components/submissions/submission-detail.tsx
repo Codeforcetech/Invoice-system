@@ -36,9 +36,16 @@ const fmt = (d: Date) =>
   }).format(d);
 
 /** 提出の中身（請求の内容・差出人・添付・履歴）。提出者の詳細と、管理者の承認画面で共通に使う。 */
-export function SubmissionDetail({ s }: { s: LoadedSubmission }) {
+export function SubmissionDetail({
+  s,
+  fileHref,
+}: {
+  s: LoadedSubmission;
+  /** 添付ファイルのリンク先。外部の人の画面では、リンク専用の取得先を渡す。 */
+  fileHref?: (fileId: string) => string;
+}) {
   const groups = taxGroups(s.items);
-  const sender = s.senderName || s.submitter.name;
+  const sender = s.senderName || s.submitter?.name || s.link?.label || "";
   return (
     <div className="space-y-5">
       <Card>
@@ -181,7 +188,11 @@ export function SubmissionDetail({ s }: { s: LoadedSubmission }) {
               {s.files.map((f) => (
                 <li key={f.id}>
                   <a
-                    href={`/api/submissions/${s.id}/files/${f.id}`}
+                    href={
+                      fileHref
+                        ? fileHref(f.id)
+                        : `/api/submissions/${s.id}/files/${f.id}`
+                    }
                     className="text-sky-700"
                     target="_blank"
                     rel="noreferrer"

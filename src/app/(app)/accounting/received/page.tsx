@@ -50,6 +50,7 @@ export default async function ReceivedPage({
       total: true,
       senderName: true,
       submitter: { select: { name: true } },
+      link: { select: { label: true } },
     },
   });
   const nq = normalizeSender(q);
@@ -175,7 +176,7 @@ export default async function ReceivedPage({
                   href={`/accounting/submissions/${p.id}`}
                   className="font-medium underline"
                 >
-                  {p.senderName || p.submitter.name}さん（
+                  {p.senderName || p.submitter?.name || p.link?.label}さん（
                   {p.month.replace("-", "年")}月分・¥{yen(p.total)}）
                 </Link>
               </li>

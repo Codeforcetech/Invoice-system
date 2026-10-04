@@ -9,6 +9,7 @@ import { recordAudit } from "@/lib/workspace/audit";
 import { accountingLock } from "@/lib/accounting/service";
 import { syncExpense } from "@/lib/accounting/sync";
 import { notifyUsers } from "@/lib/notifications/service";
+import { sendExternalNotice } from "@/lib/notifications/external";
 import { counterpartyKey } from "@/lib/evidence/model";
 import { EvidenceFileError, readEvidenceFile } from "@/lib/evidence/file";
 import {
@@ -51,6 +52,12 @@ function failure(e: unknown): { ok: false; error: string } {
     error: "処理できませんでした。入力内容を確認して、もう一度お試しください。",
   };
 }
+/** 提出の差出人の表示名（メンバー、または外部リンクの宛名）。 */
+const who = (row: {
+  senderName: string;
+  submitter?: { name: string } | null;
+  link?: { label: string } | null;
+}) => row.senderName || row.submitter?.name || row.link?.label || "提出者";
 const refresh = () => {
   revalidatePath("/submit", "layout");
   revalidatePath("/accounting", "layout");
@@ -359,6 +366,59 @@ export async function deleteSubmission(raw: unknown): Promise<Result> {
 
 // ---------- 管理者：承認・差戻し ----------
 
+/**
+ * 外部リンク経由の提出に、承認・差戻しをメールで知らせる（メールアドレスがあるときだけ）。
+ * 承認・差戻しの確定のあとで行い、結果を経過に残す。失敗しても、承認・差戻し自体は取り消さない。
+ */
+async function noticeExternal(
+  submissionId: string,
+  kind: "APPROVE" | "REJECT",
+  reason?: string,
+) {
+  try {
+    const row = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: {
+        id: true,
+        month: true,
+        revision: true,
+        contactEmail: true,
+        linkId: true,
+        senderName: true,
+        link: { select: { label: true } },
+      },
+    });
+    if (!row?.linkId) return;
+    const result = await sendExternalNotice({
+      to: row.contactEmail,
+      idempotencyKey: `seiq-external/${row.id}/${kind}/${row.revision}`,
+      subject:
+        kind === "APPROVE"
+          ? `【SEIQ】${row.month}分の提出が承認されました`
+          : `【SEIQ】${row.month}分の提出が差し戻されました`,
+      text:
+        kind === "APPROVE"
+          ? `${row.senderName || row.link?.label || ""} 様\n\n${row.month}分の提出（受付番号 ${row.id.slice(0, 8)}）が承認されました。\n\nこのメールに心当たりがない場合は、お手数ですが破棄してください。`
+          : `${row.senderName || row.link?.label || ""} 様\n\n${row.month}分の提出（受付番号 ${row.id.slice(0, 8)}）が差し戻されました。\n\n理由：${reason ?? ""}\n\n提出のときにお送りしたリンクから、内容を直して、もう一度提出してください。\n\nこのメールに心当たりがない場合は、お手数ですが破棄してください。`,
+    });
+    await prisma.submissionEvent.create({
+      data: {
+        submissionId: row.id,
+        actorId: `link:${row.linkId}`,
+        action: "MAIL",
+        note:
+          result === "SENT"
+            ? "メールで通知しました"
+            : result === "SKIPPED"
+              ? "メールは送っていません（メールアドレスの入力がない、または送信の設定がありません）"
+              : "メールの送信に失敗しました（リンクを再送して、連絡してください）",
+      },
+    });
+  } catch {
+    /* 通知の失敗で、承認・差戻しの結果は変えない */
+  }
+}
+
 export async function approveSubmission(
   raw: unknown,
 ): Promise<Result<{ expenses: number }>> {
@@ -375,6 +435,7 @@ export async function approveSubmission(
           items: { orderBy: { sortOrder: "asc" } },
           files: true,
           submitter: { select: { name: true } },
+          link: { select: { label: true } },
         },
       });
       if (!row) return fail("提出が見つかりません。");
@@ -411,7 +472,7 @@ export async function approveSubmission(
         const expense = await tx.expense.create({
           data: {
             userId: ws.ownerId,
-            supplier: row.senderName || row.submitter.name,
+            supplier: who(row),
             description:
               `${row.month}分 ${submissionKindLabel[g.kind]}（${names}）`.slice(
                 0,
@@ -440,14 +501,12 @@ export async function approveSubmission(
         const ev = await tx.evidenceFile.create({
           data: {
             ownerId: ws.ownerId,
-            uploadedById: row.submitterId,
+            uploadedById: row.submitterId ?? ws.userId,
             kind: "RECEIPT",
             transactionDate: new Date(Date.UTC(y, m - 1, 1)),
             amount: row.total,
-            counterparty: (row.senderName || row.submitter.name).slice(0, 150),
-            counterpartyKey: counterpartyKey(
-              row.senderName || row.submitter.name,
-            ),
+            counterparty: who(row).slice(0, 150),
+            counterpartyKey: counterpartyKey(who(row)),
             memo: `提出（${row.title}）の添付`.slice(0, 500),
             filename: f.filename,
             mimeType: f.mimeType,
@@ -481,17 +540,18 @@ export async function approveSubmission(
         action: "SUBMISSION_APPROVE",
         entity: "SUBMISSION",
         entityId: row.id,
-        summary: `提出を承認し、支払管理に反映（${row.month}分・${(row.senderName || row.submitter.name).slice(0, 40)}・¥${row.total.toLocaleString("ja-JP")}）`,
+        summary: `提出を承認し、支払管理に反映（${row.month}分・${who(row).slice(0, 40)}・¥${row.total.toLocaleString("ja-JP")}）`,
       });
       await notifyUsers(
         tx,
-        [row.submitterId],
+        row.submitterId ? [row.submitterId] : [],
         `submission:${row.id}:approved:${row.revision + 1}`,
         `${row.month}分の提出が承認されました`,
         `/submit/${row.id}`,
       );
       return groups.length;
     });
+    await noticeExternal(v.id, "APPROVE");
     refresh();
     return { ok: true, expenses: created };
   } catch (e) {
@@ -552,12 +612,13 @@ export async function rejectSubmission(raw: unknown): Promise<Result> {
       });
       await notifyUsers(
         tx,
-        [row.submitterId],
+        row.submitterId ? [row.submitterId] : [],
         `submission:${row.id}:rejected:${row.revision + 1}`,
         `${row.month}分の提出が差し戻されました`,
         `/submit/${row.id}`,
       );
     });
+    await noticeExternal(v.id, "REJECT", v.reason);
     refresh();
     return { ok: true };
   } catch (e) {

@@ -202,6 +202,11 @@ export default async function AccountingPage({
               </AppButtonLink>
             )}
             {hasRole(ws.role, "APPROVER") && (
+              <AppButtonLink href="/accounting/links" variant="secondary">
+                提出リンク
+              </AppButtonLink>
+            )}
+            {hasRole(ws.role, "APPROVER") && (
               <AppButtonLink href="/accounting/received" variant="secondary">
                 書類の受け取り状況
               </AppButtonLink>

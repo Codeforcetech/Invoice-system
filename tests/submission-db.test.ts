@@ -430,6 +430,38 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       ).toBe(1);
     });
 
+    it("after approval, the received list counts the money once (payments), links the submission's file to them, and puts it in the package once", async () => {
+      const rows = await receivedRows(
+        prisma,
+        { ownerId: owner, userId: owner },
+        "2026-09",
+      );
+      const mine = rows.filter((r) => r.sender === "山田太郎");
+      expect(mine.map((r) => r.label).sort()).toEqual([
+        "請求書（支払管理）",
+        "請求書（支払管理）",
+      ]);
+      expect(mine.reduce((n, r) => n + r.amount, 0)).toBe(168000); // 証憑のコピーを足して、倍にならない
+      expect(
+        mine.every(
+          (r) => r.hasFile && r.fileHref?.includes("/api/submissions/"),
+        ),
+      ).toBe(true);
+      const pack = await buildReceiptPackage(
+        prisma,
+        { ownerId: owner, userId: owner },
+        "2026-09",
+        { includeInvoices: true },
+      );
+      expect(
+        pack.entries.filter((e) => e.name.includes("山田太郎")),
+      ).toHaveLength(1);
+      const index = new TextDecoder("utf-8", { ignoreBOM: true }).decode(
+        pack.entries.find((e) => e.name === "一覧.csv")!.data,
+      );
+      expect(index).toContain("同じ提出のファイル");
+    });
+
     it("does nothing the second time, and freezes the contractor's edits", async () => {
       as(approver);
       expect(

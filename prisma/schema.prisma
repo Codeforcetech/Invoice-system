@@ -30,6 +30,7 @@ model User {
   submitterProfile       SubmitterProfile?
   submissionsOwned       Submission[]            @relation("SubmissionOwner")
   submissionsMade        Submission[]            @relation("SubmissionSubmitter")
+  submissionLinks        SubmissionLink[]        @relation("LinkOwner")
   claimsSubmitted        ExpenseClaim[]          @relation("ClaimApplicant")
   claimEvents            ClaimEvent[]
   notifications          AppNotification[]
@@ -671,7 +672,12 @@ model SubmitterProfile {
 model Submission {
   id                 String            @id
   ownerId            String
-  submitterId        String
+  /// メンバー（提出者）が提出したときのみ。外部リンク経由の提出は空（linkId が入る）
+  submitterId        String?
+  /// 外部の提出リンク経由のとき、そのリンク
+  linkId             String?
+  /// 外部の人が、承認・差戻しの連絡を受け取るメールアドレス（任意）
+  contactEmail       String?
   /// 何月分か（YYYY-MM）
   month              String
   title              String
@@ -694,7 +700,8 @@ model Submission {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   owner              User              @relation("SubmissionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  submitter          User              @relation("SubmissionSubmitter", fields: [submitterId], references: [id], onDelete: Restrict)
+  submitter          User?             @relation("SubmissionSubmitter", fields: [submitterId], references: [id], onDelete: Restrict)
+  link               SubmissionLink?   @relation(fields: [linkId], references: [id], onDelete: Restrict)
   items              SubmissionItem[]
   files              SubmissionFile[]
   events             SubmissionEvent[]
@@ -702,6 +709,7 @@ model Submission {
 
   @@index([ownerId, status, month])
   @@index([submitterId, updatedAt])
+  @@index([linkId, status])
 }
 
 model SubmissionItem {
@@ -746,4 +754,42 @@ model SubmissionEvent {
   submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@index([submissionId, createdAt])
+}
+
+/// 外部の人（ログインなし）が、請求書と領収書を提出するためのリンク。相手ごとに1本。
+/// トークンそのものは保存せず、ハッシュだけを保存する（発行時に1回だけ表示する）。
+model SubmissionLink {
+  id              String       @id
+  ownerId         String
+  createdById     String
+  /// 宛名・メモ（管理者だけが見る。相手の画面には「○○様」として出る）
+  label           String
+  tokenHash       String       @unique
+  /// 一覧で見分けるための、トークンの末尾4文字
+  tokenHint       String
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  /// 承認待ちの同時件数の上限
+  maxPending      Int          @default(3)
+  /// このリンクからの提出の合計の上限
+  maxSubmissions  Int          @default(20)
+  submissionCount Int          @default(0)
+  /// AIの読み取りを使える回数
+  aiReadsLimit    Int          @default(5)
+  aiReadsUsed     Int          @default(0)
+  /// 前回入力した差出人の情報（次回の入力を楽にするため）
+  profile         Json?
+  lastUsedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  owner           User         @relation("LinkOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  submissions     Submission[]
+
+  @@index([ownerId, createdAt])
+}
+
+/// ログインなしの入口で、短時間の大量アクセスを止めるための数え上げ（キーはIP等のハッシュ）。
+model PublicThrottle {
+  key         String   @id
+  windowStart DateTime
+  count       Int
 }

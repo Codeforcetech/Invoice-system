@@ -23,6 +23,7 @@
 | 月ごとの領収書まとめ出力（ZIP） | 受け取り状況の月を選び、領収書（と請求書）のファイルをZIPで出力。フォルダ分け、ファイル名は「送ってきた人_月_金額」、一覧.csv付き。合計60MBまで、同時に1件。操作ログに記録 | `lib/zip.ts`（外部ライブラリなしのZIP作成）、`lib/accounting/received.ts`（`buildReceiptPackage`）、`src/app/api/accounting/receipts-zip/route.ts` |
 | 月ごとの売上と費用（取引先つき） | 売上は入金月（入金日のある発行済み請求書＋手入力・明細取込の売上）、費用は支払月／発生月を切替（支払管理＋承認済み経費精算＋手入力・明細取込の費用）。税込／税抜（参考値）切替、年間の月別一覧、取引先ごとの小計、CSV出力 | `lib/accounting/monthly.ts`、`src/app/(app)/accounting/monthly/page.tsx`、`src/app/api/accounting/monthly-csv/route.ts` |
 | 業務委託メンバーの提出（提出者の役割・請求書づくり・承認） | 役割「提出者」（SUBMITTER）を新設。提出者は専用メニュー（書類を提出する／自分の情報）だけで、会社のデータは見えない。提出者が差出人の情報を設定し、報酬・交通費・経費の明細（税区分つき）で請求書をつくり、領収書を添えて提出。承認前は取り下げ・修正・削除できる。承認者以上が承認（→支払管理に「種類×税区分」ごとに支払い予定を作成、領収書を証憑に保存）または差戻し（理由つき）。お知らせ通知あり | `lib/workspace/access.ts`、`lib/submissions/`、`actions/submission-actions.ts`、`src/app/(app)/submit/`、`src/app/(app)/accounting/submissions/[id]/`、`src/app/api/submissions/`、移行 `20261005100000_submitter_role` `20261005110000_submissions` |
+| 外部の提出リンク（ログインなし） | 相手ごとの専用リンクを発行（有効期限7/30/90日、承認待ち同時3件・合計20件、AI読み取り回数）。相手はリンクから、差出人の情報・請求内容・領収書を入力して提出（承認待ちで登録）。承認前は、同じリンクで取り下げ・修正・出し直し。承認・差戻しはメールで通知（メールアドレスと送信設定がある場合）。リンクは保存せずハッシュのみ、発行時に1回だけ表示 | `lib/submissions/link.ts`、`actions/submission-link-actions.ts`、`actions/public-submission-actions.ts`、`lib/notifications/external.ts`、`src/app/(public)/s/`、`src/app/(app)/accounting/links/`、移行 `20261005120000_submission_links` |
 | 請求・入金連携 | 請求書発行の自動仕訳、入金消込、支払の自動仕訳、定期請求、合算請求 | `lib/accounting/sync.ts`、`actions/accounting-link-actions.ts` |
 | 明細取込 | 銀行・カードCSV、重複判定、仕訳の提案と学習、自動登録ルール | `lib/accounting/statement-csv.ts`、`statements.ts`、`actions/statement-actions.ts` |
 | 経費精算 | 申請→承認→仕訳、レシート添付、通知（アプリ内・メール） | `actions/claim-actions.ts`、`lib/claims/`、`lib/notifications/` |
@@ -240,3 +241,13 @@ AI が書いたコードなので、特に次を見てほしい（金額・権�
 - 連続して失敗したとき（60秒以内に3回）は、1分間は外部を呼ばず、すぐ「混み合っています」と返す（利用者を待たせないため）。成功すると数え直す。タイムアウトは20秒。
 - 管理者が確認すること: サーバーのログに `receipt-ocr: upstream status <番号>` が続く場合、401/403 はキー、402 や 400 は利用残高・設定、429/5xx は混雑。Anthropicのコンソールで利用状況と上限を確認する。
 - 手入力の代わりになる別の読み取り方法（自社サーバー内のOCRなど）は未実装。必要なら `readReceiptWithAi` と同じ形の窓口として差し替えられる。
+
+
+### 外部の提出リンク（本番に出す前の確認事項）
+
+- ログインなしで誰でも到達できる入口（`/s/{token}`）。公開前に、エンジニアによる確認（攻撃の観点）が必要。
+- 保護: トークンは32バイトの乱数でハッシュのみ保存、無効・期限切れ・取り消しは同じ404/同じ文面、IPとリンクごとのレート制限（`PublicThrottle` テーブル）、提出回数・承認待ち件数の上限、見えない入力欄の罠、ファイルは証憑と同じ検査、`Referrer-Policy: no-referrer`・`noindex`・`no-store`（`next.config.ts`）。
+- 送り元IPは `x-forwarded-for` の先頭を使う。ホスティングのプロキシが付ける値を前提にしている（プロキシがない環境では偽装できる）。本番の構成で確認すること。
+- リンクのパスにトークンが入るため、ホスティング側のアクセスログに残る可能性がある。
+- メール通知は、`RESEND_API_KEY`・`NOTIFICATION_FROM_EMAIL`・`NOTIFICATION_APP_URL` の設定と、相手が入力したメールアドレスがある場合のみ。再送の仕組み（アウトボックス）はなく、1回だけやり直し、結果は提出の経過に記録する。
+- 古い `PublicThrottle` の行は、`purgeThrottle`（`lib/submissions/link.ts`）で消せる。定期実行は未設定。

@@ -28,11 +28,12 @@ export async function loadSubmission(
       },
       events: { orderBy: { createdAt: "asc" } },
       submitter: { select: { name: true } },
+      link: { select: { label: true } },
       expenses: { select: { id: true, category: true, amount: true } },
     },
   });
   if (!row) return null;
-  const mine = row.submitterId === ws.userId;
+  const mine = !!row.submitterId && row.submitterId === ws.userId;
   const reviewer = hasRole(ws.role, "APPROVER") && row.status !== "DRAFT";
   if (!mine && !reviewer) return null;
   const actorIds = [...new Set(row.events.map((e) => e.actorId))];
@@ -63,4 +64,5 @@ export const eventLabel: Record<string, string> = {
   WITHDRAW: "取り下げ",
   APPROVE: "承認",
   REJECT: "差戻し",
+  MAIL: "メール通知",
 };

@@ -29,6 +29,8 @@ export type ReceivedRow = {
   href: string;
   /** 登録・申請した人（わかる場合） */
   registeredBy: string | null;
+  /** 提出の承認で作られた支払いのとき、元の提出の添付ファイル（先頭の1件） */
+  submissionFileId?: string | null;
 };
 
 export const normalizeSender = (v: string) =>
@@ -69,6 +71,7 @@ export async function receivedRows(
         costMonth: true,
         paidDate: true,
         createdAt: true,
+        submissionId: true,
         attachment: { select: { expenseId: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -100,8 +103,11 @@ export async function receivedRows(
         ownerId: ws.ownerId,
         status: "ACTIVE",
         kind: { in: ["RECEIPT", "INVOICE"] },
-        // 支払管理から取り込んだ添付は、支払管理の側で数える（二重に数えない）。
-        OR: [{ sourceType: null }, { sourceType: { not: "EXPENSE" } }],
+        // 支払管理・提出の承認から取り込んだ添付は、元の側で数える（二重に数えない）。
+        OR: [
+          { sourceType: null },
+          { sourceType: { notIn: ["EXPENSE", "SUBMISSION"] } },
+        ],
         transactionDate: range,
       },
       select: {
@@ -131,12 +137,32 @@ export async function receivedRows(
         submittedAt: true,
         createdAt: true,
         submitter: { select: { name: true } },
+        link: { select: { label: true } },
         files: { select: { id: true }, take: 1 },
       },
       orderBy: { createdAt: "desc" },
       take: LIMIT,
     }),
   ]);
+  // 提出の承認で作られた支払いは、元の提出の添付ファイルを、その支払いの添付として扱う。
+  const subIds = [
+    ...new Set(
+      expenses.map((e) => e.submissionId).filter((v): v is string => !!v),
+    ),
+  ];
+  const subFiles = subIds.length
+    ? await db.submissionFile.findMany({
+        where: {
+          submissionId: { in: subIds },
+          submission: { ownerId: ws.ownerId },
+        },
+        select: { id: true, submissionId: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+  const firstFile = new Map<string, string>();
+  for (const f of subFiles)
+    if (!firstFile.has(f.submissionId)) firstFile.set(f.submissionId, f.id);
   const uploaderIds = [...new Set(evidence.map((e) => e.uploadedById))];
   const nameOf = new Map(
     (uploaderIds.length
@@ -157,8 +183,16 @@ export async function receivedRows(
       month: e.costMonth,
       receivedAt: e.createdAt,
       amount: e.amount,
-      hasFile: !!e.attachment,
-      fileHref: e.attachment ? `/api/expenses/${e.id}/pdf` : null,
+      hasFile:
+        !!e.attachment || !!(e.submissionId && firstFile.get(e.submissionId)),
+      fileHref: e.attachment
+        ? `/api/expenses/${e.id}/pdf`
+        : e.submissionId && firstFile.get(e.submissionId)
+          ? `/api/submissions/${e.submissionId}/files/${firstFile.get(e.submissionId)}`
+          : null,
+      submissionFileId: e.submissionId
+        ? (firstFile.get(e.submissionId) ?? null)
+        : null,
       status: e.paidDate ? "支払済み" : "未払い",
       href: `/expenses/${e.id}/edit`,
       registeredBy: null,
@@ -181,7 +215,8 @@ export async function receivedRows(
       key: `submission:${x.id}`,
       kind: "INVOICE",
       label: "請求書（業務委託の提出）",
-      sender: x.senderName || x.submitter.name,
+      sender:
+        x.senderName || x.submitter?.name || x.link?.label || "外部の提出",
       month,
       receivedAt: x.submittedAt ?? x.createdAt,
       amount: x.total,
@@ -191,7 +226,8 @@ export async function receivedRows(
         : null,
       status: x.status === "SUBMITTED" ? "承認待ち" : "差戻し",
       href: `/accounting/submissions/${x.id}`,
-      registeredBy: x.submitter.name,
+      registeredBy:
+        x.submitter?.name ?? (x.link ? `外部リンク「${x.link.label}」` : null),
     })),
     ...evidence.map((e): ReceivedRow => ({
       key: `evidence:${e.id}`,
@@ -301,7 +337,7 @@ export async function buildReceiptPackage(
       .filter((r) => r.hasFile)
       .map((r) => idOf(r.key, prefix))
       .filter((v): v is string => !!v);
-  const [exp, clm, evd] = await Promise.all([
+  const [exp, clm, evd, sub] = await Promise.all([
     db.expenseAttachment.findMany({
       where: { expenseId: { in: ids("expense") } },
       select: { expenseId: true, data: true },
@@ -312,6 +348,18 @@ export async function buildReceiptPackage(
     }),
     db.evidenceFile.findMany({
       where: { id: { in: ids("evidence") }, ownerId: ws.ownerId },
+      select: { id: true, data: true, mimeType: true },
+    }),
+    // 提出の承認で作られた支払いの、元の提出の添付ファイル
+    db.submissionFile.findMany({
+      where: {
+        id: {
+          in: rows
+            .map((r) => r.submissionFileId)
+            .filter((v): v is string => !!v),
+        },
+        submission: { ownerId: ws.ownerId },
+      },
       select: { id: true, data: true, mimeType: true },
     }),
   ]);
@@ -328,6 +376,11 @@ export async function buildReceiptPackage(
     });
   for (const e of evd)
     files.set(`evidence:${e.id}`, {
+      data: new Uint8Array(e.data),
+      mime: e.mimeType,
+    });
+  for (const e of sub)
+    files.set(`submissionfile:${e.id}`, {
       data: new Uint8Array(e.data),
       mime: e.mimeType,
     });
@@ -353,10 +406,17 @@ export async function buildReceiptPackage(
       dateStyle: "short",
       timeStyle: "short",
     }).format(d);
+  // 同じ提出から作られた複数の支払いは、同じファイルを指す。ZIPには1回だけ入れる。
+  const sharedPath = new Map<string, string>();
   for (const r of rows) {
-    const f = files.get(r.key);
+    const shareKey = r.submissionFileId ?? null;
+    const f =
+      files.get(r.key) ??
+      (shareKey ? files.get(`submissionfile:${shareKey}`) : undefined);
     let path = "添付なし";
-    if (f) {
+    if (f && shareKey && !files.has(r.key) && sharedPath.has(shareKey)) {
+      path = `${sharedPath.get(shareKey)}（同じ提出のファイル）`;
+    } else if (f) {
       const folder = r.kind === "RECEIPT" ? "領収書" : "請求書";
       const base = downloadName(
         [r.sender, r.month, `${r.amount}円`],
@@ -371,6 +431,7 @@ export async function buildReceiptPackage(
       entries.push({ name, data: f.data, date: r.receivedAt });
       totalBytes += f.data.length;
       path = name;
+      if (shareKey && !files.has(r.key)) sharedPath.set(shareKey, name);
     } else withoutFile++;
     index.push([
       r.label,

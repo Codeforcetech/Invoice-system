@@ -52,7 +52,7 @@ const rules: {
   },
   {
     pattern:
-      /^\/accounting\/(assets|evidence|linking|statements|opening|received|monthly)$/,
+      /^\/accounting\/(assets|evidence|linking|statements|opening|received|monthly|links)$/,
     parent: () => ({ href: "/accounting", label: "会計・帳簿" }),
   },
   {

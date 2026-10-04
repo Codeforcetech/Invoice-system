@@ -3,12 +3,17 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveSubmission, submitSubmission } from "@/actions/submission-actions";
 import {
+  resubmitViaLink,
+  submitViaLink,
+} from "@/actions/public-submission-actions";
+import {
   MAX_SUBMISSION_FILES,
   SUBMISSION_KINDS,
   defaultTaxFor,
   needsReceipt,
   submissionKindLabel,
   submissionTotals,
+  type ProfileInput,
   type SubmissionKind,
 } from "@/lib/submissions/model";
 import {
@@ -62,9 +67,12 @@ const blank = (kind: SubmissionKind = "REWARD"): Row => ({
 export function SubmissionForm({
   initialMonth,
   data,
+  external,
 }: {
   initialMonth: string;
   data?: SubmissionFormData;
+  /** 外部の提出リンク（ログインなし）から開いたとき。差出人の情報も、ここで入力する。 */
+  external?: { token: string; profile: ProfileInput; contactEmail: string };
 }) {
   const router = useRouter();
   const [id] = useState(() => data?.id ?? crypto.randomUUID());
@@ -91,6 +99,11 @@ export function SubmissionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const picker = useRef<HTMLInputElement>(null);
+  const honeypot = useRef<HTMLInputElement>(null);
+  const [profile, setProfile] = useState<ProfileInput | null>(
+    external?.profile ?? null,
+  );
+  const [email, setEmail] = useState(external?.contactEmail ?? "");
 
   const parsed = rows.map((r) => ({
     ...r,
@@ -123,6 +136,37 @@ export function SubmissionForm({
     setBusy(true);
     setError("");
     try {
+      if (external && profile) {
+        const f = new FormData();
+        f.set("token", external.token);
+        f.set("website", honeypot.current?.value ?? "");
+        f.set(
+          "payload",
+          JSON.stringify({
+            id,
+            month,
+            title: title.trim() || `${month.replace("-", "年")}月分の請求書`,
+            note,
+            profile,
+            contactEmail: email,
+            items: rows.map((r) => ({
+              kind: r.kind,
+              name: r.name,
+              quantity: r.quantity,
+              unitPrice: r.unitPrice,
+              taxCategory: r.taxCategory,
+              note: r.note,
+            })),
+          }),
+        );
+        for (const file of fresh) f.append("files", file);
+        f.set("removeFiles", JSON.stringify(removed));
+        const r = await (data ? resubmitViaLink(f) : submitViaLink(f));
+        if (!r.ok) return setError(r.error);
+        router.push(`/s/${external.token}/${r.id}?done=1`);
+        router.refresh();
+        return;
+      }
       const f = new FormData();
       f.set(
         "payload",
@@ -180,6 +224,74 @@ export function SubmissionForm({
           </p>
           <p className="mt-1 whitespace-pre-wrap">理由：{data.rejectReason}</p>
         </div>
+      )}
+      {external && profile && (
+        <Card>
+          <CardSection>
+            <h2 className="font-semibold">
+              あなたの情報（請求書の差出人になります）
+            </h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  ["legalName", "お名前（または会社名）", "必須"],
+                  ["address", "住所", ""],
+                  [
+                    "registrationNumber",
+                    "インボイスの登録番号（ある方のみ）",
+                    "",
+                  ],
+                  ["bankName", "振込先の銀行名", ""],
+                  ["branchName", "支店名", ""],
+                  ["accountType", "口座の種類（例：普通）", ""],
+                  ["accountNumber", "口座番号", ""],
+                  ["accountHolder", "口座名義（カタカナ）", ""],
+                ] as [keyof ProfileInput, string, string][]
+              ).map(([name, label, req]) => (
+                <label key={name} className="block text-sm">
+                  <span className="font-semibold">
+                    {label}
+                    {req && (
+                      <span className="ml-1 text-xs text-rose-700">{req}</span>
+                    )}
+                  </span>
+                  <input
+                    value={profile[name]}
+                    onChange={(e) =>
+                      setProfile({ ...profile, [name]: e.target.value })
+                    }
+                    maxLength={name === "address" ? 200 : 100}
+                    className={`mt-1 ${inputClass}`}
+                  />
+                </label>
+              ))}
+              <label className="block text-sm sm:col-span-2">
+                <span className="font-semibold">
+                  承認・差し戻しの連絡を受け取るメールアドレス（なくてもかまいません）
+                </span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  maxLength={200}
+                  className={`mt-1 ${inputClass}`}
+                />
+                <span className="mt-1 block text-xs text-slate-500">
+                  入力すると、結果をメールでお知らせします。入力しない場合は、提出した方から連絡を受けてください。
+                </span>
+              </label>
+            </div>
+            {/* 自動で送信するプログラム向けの罠。人には見えない。 */}
+            <input
+              ref={honeypot}
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden
+              className="absolute -left-[9999px] h-0 w-0 opacity-0"
+            />
+          </CardSection>
+        </Card>
       )}
       <Card>
         <CardSection>
@@ -486,16 +598,24 @@ export function SubmissionForm({
           disabled={busy}
           onClick={() => void save(true)}
         >
-          {busy ? "処理中…" : "保存して提出する"}
+          {busy
+            ? "処理中…"
+            : external
+              ? data
+                ? "直して出し直す"
+                : "提出する"
+              : "保存して提出する"}
         </AppButton>
-        <AppButton
-          type="button"
-          variant="secondary"
-          disabled={busy}
-          onClick={() => void save(false)}
-        >
-          下書きとして保存
-        </AppButton>
+        {!external && (
+          <AppButton
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void save(false)}
+          >
+            下書きとして保存
+          </AppButton>
+        )}
         <span className="text-xs text-slate-500">
           提出したあとも、承認される前なら、取り下げて直せます。
           {fileCount ? `（添付 ${fileCount}件）` : ""}
