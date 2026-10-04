@@ -91,7 +91,7 @@ export function ExpenseForm({ expense }: { expense?: ExpenseRow }) {
                       tax instanceof HTMLSelectElement &&
                       !tax.value
                     )
-                      tax.value = "NON_TAXABLE";
+                      tax.value = "EXEMPT";
                   }}
                   className={`mt-2 ${selectClass}`}
                 >

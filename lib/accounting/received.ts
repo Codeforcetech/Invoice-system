@@ -57,7 +57,7 @@ export async function receivedRows(
   month: string,
 ): Promise<ReceivedRow[]> {
   const range = monthRange(month);
-  const [expenses, claims, evidence] = await Promise.all([
+  const [expenses, claims, evidence, submissions] = await Promise.all([
     db.expense.findMany({
       where: { userId: ws.ownerId, costMonth: month },
       select: {
@@ -116,6 +116,26 @@ export async function receivedRows(
       orderBy: { createdAt: "desc" },
       take: LIMIT,
     }),
+    // 業務委託メンバーの提出。承認されたものは、支払管理・証憑の側で数える。
+    db.submission.findMany({
+      where: {
+        ownerId: ws.ownerId,
+        status: { in: ["SUBMITTED", "REJECTED"] },
+        month,
+      },
+      select: {
+        id: true,
+        senderName: true,
+        total: true,
+        status: true,
+        submittedAt: true,
+        createdAt: true,
+        submitter: { select: { name: true } },
+        files: { select: { id: true }, take: 1 },
+      },
+      orderBy: { createdAt: "desc" },
+      take: LIMIT,
+    }),
   ]);
   const uploaderIds = [...new Set(evidence.map((e) => e.uploadedById))];
   const nameOf = new Map(
@@ -156,6 +176,22 @@ export async function receivedRows(
       status: claimStatus[c.status] ?? c.status,
       href: `/claims/${c.id}`,
       registeredBy: c.applicant.name,
+    })),
+    ...submissions.map((x): ReceivedRow => ({
+      key: `submission:${x.id}`,
+      kind: "INVOICE",
+      label: "請求書（業務委託の提出）",
+      sender: x.senderName || x.submitter.name,
+      month,
+      receivedAt: x.submittedAt ?? x.createdAt,
+      amount: x.total,
+      hasFile: x.files.length > 0,
+      fileHref: x.files[0]
+        ? `/api/submissions/${x.id}/files/${x.files[0].id}`
+        : null,
+      status: x.status === "SUBMITTED" ? "承認待ち" : "差戻し",
+      href: `/accounting/submissions/${x.id}`,
+      registeredBy: x.submitter.name,
     })),
     ...evidence.map((e): ReceivedRow => ({
       key: `evidence:${e.id}`,
@@ -252,8 +288,11 @@ export async function buildReceiptPackage(
   options: { includeInvoices: boolean },
 ): Promise<PackageResult> {
   const all = await receivedRows(db, ws, month);
+  // 承認前の提出は、承認されるまで支払管理・証憑にはまだない。まとめの対象外にする。
   const rows = all.filter(
-    (r) => options.includeInvoices || r.kind === "RECEIPT",
+    (r) =>
+      !r.key.startsWith("submission:") &&
+      (options.includeInvoices || r.kind === "RECEIPT"),
   );
   const idOf = (key: string, prefix: string) =>
     key.startsWith(prefix + ":") ? key.slice(prefix.length + 1) : null;

@@ -40,6 +40,18 @@ export default async function ReceivedPage({
     receivedRows(prisma, ws, month),
     receivedRows(prisma, ws, shiftMonthText(month, -1)),
   ]);
+  const pendingSubmissions = await prisma.submission.findMany({
+    where: { ownerId: ws.ownerId, status: "SUBMITTED" },
+    orderBy: { submittedAt: "asc" },
+    take: 20,
+    select: {
+      id: true,
+      month: true,
+      total: true,
+      senderName: true,
+      submitter: { select: { name: true } },
+    },
+  });
   const nq = normalizeSender(q);
   const shown = nq
     ? rows.filter((r) => normalizeSender(r.sender).includes(nq))
@@ -147,6 +159,30 @@ export default async function ReceivedPage({
           </div>
         </CardSection>
       </Card>
+
+      {pendingSubmissions.length > 0 && (
+        <div
+          role="status"
+          className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"
+        >
+          <p className="font-semibold">
+            承認待ちの提出が{pendingSubmissions.length}件あります
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {pendingSubmissions.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/accounting/submissions/${p.id}`}
+                  className="font-medium underline"
+                >
+                  {p.senderName || p.submitter.name}さん（
+                  {p.month.replace("-", "年")}月分・¥{yen(p.total)}）
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {waiting.length > 0 && !nq && (
         <div

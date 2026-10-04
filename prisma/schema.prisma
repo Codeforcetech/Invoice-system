@@ -27,6 +27,9 @@ model User {
   feeds                  StatementFeed[]
   claimWorkspace         ClaimWorkspace?         @relation("ClaimOwner")
   claimMemberships       ClaimMember[]
+  submitterProfile       SubmitterProfile?
+  submissionsOwned       Submission[]            @relation("SubmissionOwner")
+  submissionsMade        Submission[]            @relation("SubmissionSubmitter")
   claimsSubmitted        ExpenseClaim[]          @relation("ClaimApplicant")
   claimEvents            ClaimEvent[]
   notifications          AppNotification[]
@@ -75,64 +78,64 @@ model AuditLog {
 
 // Reporting metadata; source records and accounting amounts are never changed.
 model ReportAnnotation {
-  userId String
-  targetType String
-  targetId String
-  department String @default("")
-  office String @default("")
-  plannedDate DateTime? @db.Date
-  bankCode String @default("")
-  branchCode String @default("")
-  bankAccountType String @default("")
-  bankAccountNumber String @default("")
-  bankAccountHolder String @default("")
-  version Int @default(1)
-  updatedAt DateTime @updatedAt
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  targetType        String
+  targetId          String
+  department        String    @default("")
+  office            String    @default("")
+  plannedDate       DateTime? @db.Date
+  bankCode          String    @default("")
+  branchCode        String    @default("")
+  bankAccountType   String    @default("")
+  bankAccountNumber String    @default("")
+  bankAccountHolder String    @default("")
+  version           Int       @default(1)
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, targetType, targetId])
   @@index([userId, department, office])
 }
 
 model FixedAsset {
-  id String @id
-  userId String
-  name String
-  acquiredDate DateTime @db.Date
-  serviceDate DateTime @db.Date
-  cost Int
-  usefulLife Int
-  method String
-  fiscalStartMonth Int @default(1)
-  assetAccountId String
+  id               String                @id
+  userId           String
+  name             String
+  acquiredDate     DateTime              @db.Date
+  serviceDate      DateTime              @db.Date
+  cost             Int
+  usefulLife       Int
+  method           String
+  fiscalStartMonth Int                   @default(1)
+  assetAccountId   String
   expenseAccountId String
-  note String @default("")
-  archived Boolean @default(false)
-  revision Int @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assetAccount Account @relation("FixedAssetAccount", fields: [userId, assetAccountId], references: [userId, id])
-  expenseAccount Account @relation("DepreciationAccount", fields: [userId, expenseAccountId], references: [userId, id])
-  postings DepreciationPosting[]
+  note             String                @default("")
+  archived         Boolean               @default(false)
+  revision         Int                   @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetAccount     Account               @relation("FixedAssetAccount", fields: [userId, assetAccountId], references: [userId, id])
+  expenseAccount   Account               @relation("DepreciationAccount", fields: [userId, expenseAccountId], references: [userId, id])
+  postings         DepreciationPosting[]
 
   @@unique([userId, id])
   @@index([userId, archived, createdAt])
 }
 
 model DepreciationPosting {
-  id String @id @default(cuid())
-  userId String
-  assetId String
-  entryId String
-  month String
-  amount Int
-  active Boolean @default(true)
+  id             String       @id @default(cuid())
+  userId         String
+  assetId        String
+  entryId        String
+  month          String
+  amount         Int
+  active         Boolean      @default(true)
   canceledReason String?
-  canceledAt DateTime?
-  createdAt DateTime @default(now())
-  asset FixedAsset @relation(fields: [userId, assetId], references: [userId, id])
-  entry JournalEntry @relation(fields: [userId, entryId], references: [userId, id])
+  canceledAt     DateTime?
+  createdAt      DateTime     @default(now())
+  asset          FixedAsset   @relation(fields: [userId, assetId], references: [userId, id])
+  entry          JournalEntry @relation(fields: [userId, entryId], references: [userId, id])
 
   @@unique([assetId, month, entryId])
   @@index([userId, assetId, active, month])
@@ -295,24 +298,28 @@ enum InvoiceStatus {
 }
 
 model Expense {
-  id          String             @id @default(cuid())
-  userId      String
-  supplier    String
-  description String
-  category    String
+  id           String             @id @default(cuid())
+  userId       String
+  supplier     String
+  description  String
+  category     String
   /// 課税仕入などの消費税区分。null は未設定
-  taxCategory String?
-  amount      Int
-  costMonth   String
-  dueDate     DateTime           @db.Date
-  paidDate    DateTime?          @db.Date
-  note        String             @default("")
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  attachment  ExpenseAttachment?
+  taxCategory  String?
+  amount       Int
+  costMonth    String
+  dueDate      DateTime           @db.Date
+  paidDate     DateTime?          @db.Date
+  note         String             @default("")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment   ExpenseAttachment?
+  /// 業務委託メンバーの提出を承認して作られた支払いのとき、その提出
+  submissionId String?
+  submission   Submission?        @relation(fields: [submissionId], references: [id], onDelete: Restrict)
 
   @@index([userId, costMonth])
+  @@index([submissionId])
   @@index([userId, paidDate, dueDate])
 }
 
@@ -332,19 +339,19 @@ model AccountingSetting {
 }
 
 model Account {
-  id     String          @id @default(cuid())
-  userId String
-  code   String
-  name   String
-  kind   String
-  active Boolean         @default(true)
-  system Boolean         @default(false)
-  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lines  JournalLine[]
-  feeds  StatementFeed[]
-  rules  StatementRule[]
-  assetAccounts FixedAsset[] @relation("FixedAssetAccount")
-  depreciationAccounts FixedAsset[] @relation("DepreciationAccount")
+  id                   String          @id @default(cuid())
+  userId               String
+  code                 String
+  name                 String
+  kind                 String
+  active               Boolean         @default(true)
+  system               Boolean         @default(false)
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lines                JournalLine[]
+  feeds                StatementFeed[]
+  rules                StatementRule[]
+  assetAccounts        FixedAsset[]    @relation("FixedAssetAccount")
+  depreciationAccounts FixedAsset[]    @relation("DepreciationAccount")
 
   @@unique([userId, code])
   @@unique([userId, id])
@@ -363,9 +370,9 @@ model JournalEntry {
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   lines      JournalLine[]
 
-  statementRows StatementRow[]
-  expenseClaims ExpenseClaim[] @relation("ClaimPosting")
-  paidClaims    ExpenseClaim[] @relation("ClaimPayment")
+  statementRows        StatementRow[]
+  expenseClaims        ExpenseClaim[]        @relation("ClaimPosting")
+  paidClaims           ExpenseClaim[]        @relation("ClaimPayment")
   depreciationPostings DepreciationPosting[]
 
   @@unique([userId, requestKey])
@@ -374,16 +381,16 @@ model JournalEntry {
 }
 
 model JournalLine {
-  id        String       @id @default(cuid())
-  userId    String
-  entryId   String
-  accountId String
-  debit     Int          @default(0)
-  credit    Int          @default(0)
+  id          String       @id @default(cuid())
+  userId      String
+  entryId     String
+  accountId   String
+  debit       Int          @default(0)
+  credit      Int          @default(0)
   /// 消費税区分。null は未設定（既存の仕訳・区分を指定しない仕訳）
   taxCategory String?
-  entry     JournalEntry @relation(fields: [userId, entryId], references: [userId, id], onDelete: Cascade)
-  account   Account      @relation(fields: [userId, accountId], references: [userId, id])
+  entry       JournalEntry @relation(fields: [userId, entryId], references: [userId, id], onDelete: Cascade)
+  account     Account      @relation(fields: [userId, accountId], references: [userId, id])
 
   @@index([userId, accountId])
 }
@@ -641,4 +648,102 @@ model LoginThrottle {
   firstFailedAt DateTime  @default(now())
   lockedUntil   DateTime?
   updatedAt     DateTime  @updatedAt
+}
+
+/// 業務委託メンバー（提出者）が自分の情報として設定する、請求書の差出人の情報
+model SubmitterProfile {
+  userId             String   @id
+  ownerId            String
+  legalName          String
+  address            String   @default("")
+  phone              String   @default("")
+  registrationNumber String   @default("")
+  bankName           String   @default("")
+  branchName         String   @default("")
+  accountType        String   @default("")
+  accountNumber      String   @default("")
+  accountHolder      String   @default("")
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// 業務委託メンバーが提出する報酬の請求書（領収書つき）。管理者が承認すると、支払管理に反映される。
+model Submission {
+  id                 String            @id
+  ownerId            String
+  submitterId        String
+  /// 何月分か（YYYY-MM）
+  month              String
+  title              String
+  note               String            @default("")
+  /// DRAFT 下書き / SUBMITTED 承認待ち / APPROVED 承認済み / REJECTED 差戻し
+  status             String            @default("DRAFT")
+  revision           Int               @default(0)
+  subtotal           Int               @default(0)
+  taxAmount          Int               @default(0)
+  total              Int               @default(0)
+  /// 提出時点の差出人の情報（あとでプロフィールを変えても、提出した内容は変わらない）
+  senderName         String            @default("")
+  senderAddress      String            @default("")
+  senderRegistration String            @default("")
+  senderBank         String            @default("")
+  rejectReason       String?
+  decidedById        String?
+  decidedAt          DateTime?
+  submittedAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  owner              User              @relation("SubmissionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  submitter          User              @relation("SubmissionSubmitter", fields: [submitterId], references: [id], onDelete: Restrict)
+  items              SubmissionItem[]
+  files              SubmissionFile[]
+  events             SubmissionEvent[]
+  expenses           Expense[]
+
+  @@index([ownerId, status, month])
+  @@index([submitterId, updatedAt])
+}
+
+model SubmissionItem {
+  id           String     @id @default(cuid())
+  submissionId String
+  sortOrder    Int
+  /// REWARD 報酬 / TRANSPORT 交通費 / EXPENSE その他の経費
+  kind         String
+  name         String
+  quantity     Decimal    @db.Decimal(12, 2)
+  unitPrice    Int
+  /// 税抜の金額（単価 × 数量）
+  amount       Int
+  taxCategory  String
+  note         String     @default("")
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model SubmissionFile {
+  id           String     @id @default(cuid())
+  submissionId String
+  filename     String
+  mimeType     String
+  size         Int
+  sha256       String
+  data         Bytes
+  createdAt    DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model SubmissionEvent {
+  id           String     @id @default(cuid())
+  submissionId String
+  actorId      String
+  action       String
+  note         String     @default("")
+  createdAt    DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
 }

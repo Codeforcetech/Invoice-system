@@ -10,6 +10,21 @@ const rules: {
   parent: (m: RegExpMatchArray) => ParentLink;
 }[] = [
   {
+    pattern: /^\/submit\/[^/]+\/edit$/,
+    parent: () => ({ href: "/submit", label: "提出の一覧" }),
+  },
+  {
+    pattern: /^\/submit\/[^/]+$/,
+    parent: () => ({ href: "/submit", label: "提出の一覧" }),
+  },
+  {
+    pattern: new RegExp(`^/accounting/submissions/${ID}$`),
+    parent: () => ({
+      href: "/accounting/received",
+      label: "書類の受け取り状況",
+    }),
+  },
+  {
     pattern: /^\/accounting\/transactions\/new$/,
     parent: () => ({ href: "/accounting", label: "お金の出入り" }),
   },

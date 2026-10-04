@@ -20,6 +20,7 @@ export const auditEntityLabel: Record<string, string> = {
   TEMPLATE: "テンプレート",
   MAIL: "メール",
   EVIDENCE: "証憑",
+  SUBMISSION: "提出",
 };
 
 /**
