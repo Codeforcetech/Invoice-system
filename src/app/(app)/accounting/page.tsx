@@ -197,6 +197,11 @@ export default async function AccountingPage({
               固定資産
             </AppButtonLink>
             {hasRole(ws.role, "APPROVER") && (
+              <AppButtonLink href="/accounting/monthly" variant="secondary">
+                月ごとの売上と費用
+              </AppButtonLink>
+            )}
+            {hasRole(ws.role, "APPROVER") && (
               <AppButtonLink href="/accounting/received" variant="secondary">
                 書類の受け取り状況
               </AppButtonLink>

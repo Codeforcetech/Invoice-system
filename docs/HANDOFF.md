@@ -21,6 +21,7 @@
 | 領収書の自動読み取り（経費精算） | 領収書の写真・PDFをドラッグ＆ドロップかフォルダ選択で添付すると、Claude Haiku 4.5で日付・金額・支払先・分類を読み取り、入力欄に入れる（確認して申請）。キー未設定なら手入力のまま。1人あたり1時間30回の簡易上限 | `lib/ocr/receipt.ts`、`actions/claim-actions.ts`（`readClaimReceiptAi`）、`src/components/claims/form.tsx` |
 | 書類の受け取り状況 | 誰が・いつ・何月分の請求書・領収書を送ってきたかを、月ごとに一覧（支払管理・経費精算・証憑を集約）。送ってきた人ごとの集計、添付の有無、先月届いて今月まだの人。新しいテーブルはなし | `lib/accounting/received.ts`、`src/app/(app)/accounting/received/page.tsx` |
 | 月ごとの領収書まとめ出力（ZIP） | 受け取り状況の月を選び、領収書（と請求書）のファイルをZIPで出力。フォルダ分け、ファイル名は「送ってきた人_月_金額」、一覧.csv付き。合計60MBまで、同時に1件。操作ログに記録 | `lib/zip.ts`（外部ライブラリなしのZIP作成）、`lib/accounting/received.ts`（`buildReceiptPackage`）、`src/app/api/accounting/receipts-zip/route.ts` |
+| 月ごとの売上と費用（取引先つき） | 売上は入金月（入金日のある発行済み請求書＋手入力・明細取込の売上）、費用は支払月／発生月を切替（支払管理＋承認済み経費精算＋手入力・明細取込の費用）。税込／税抜（参考値）切替、年間の月別一覧、取引先ごとの小計、CSV出力 | `lib/accounting/monthly.ts`、`src/app/(app)/accounting/monthly/page.tsx`、`src/app/api/accounting/monthly-csv/route.ts` |
 | 請求・入金連携 | 請求書発行の自動仕訳、入金消込、支払の自動仕訳、定期請求、合算請求 | `lib/accounting/sync.ts`、`actions/accounting-link-actions.ts` |
 | 明細取込 | 銀行・カードCSV、重複判定、仕訳の提案と学習、自動登録ルール | `lib/accounting/statement-csv.ts`、`statements.ts`、`actions/statement-actions.ts` |
 | 経費精算 | 申請→承認→仕訳、レシート添付、通知（アプリ内・メール） | `actions/claim-actions.ts`、`lib/claims/`、`lib/notifications/` |
