@@ -9,7 +9,8 @@ import { RECEIPT_CATEGORIES, japanToday } from "@/lib/expenses/model";
  */
 export const DEFAULT_RECEIPT_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 20_000;
+const RETRY_DELAY_MS = 800;
 
 export type ReceiptReading = {
   merchant: string;
@@ -18,9 +19,45 @@ export type ReceiptReading = {
   category: (typeof RECEIPT_CATEGORIES)[number];
   note: string;
 };
+/**
+ * 読み取りが使えなかった理由。
+ * - unconfigured: キー未設定（手入力で使う）
+ * - busy: 混雑・通信の失敗（少し待てば使えることがある）
+ * - rejected: 認証・利用上限などで、いまは使えない（管理者が確認する）
+ * - unreadable: 画像から読み取れなかった（撮り直しか手入力）
+ */
+export type OcrFailureReason =
+  "unconfigured" | "busy" | "rejected" | "unreadable";
 export type ReceiptReadResult =
   | { ok: true; data: Partial<ReceiptReading> }
-  | { ok: false; reason: "unconfigured" | "failed"; error: string };
+  | { ok: false; reason: OcrFailureReason; error: string; retryable: boolean };
+
+const messages: Record<OcrFailureReason, string> = {
+  unconfigured: "自動読み取りは、まだ設定されていません。手入力してください。",
+  busy: "ただいま自動読み取りが混み合っています。少し待ってもう一度お試しいただくか、手入力してください。",
+  rejected:
+    "自動読み取りは、いま使えません。手入力してください（管理者の方は、設定と利用状況を確認してください）。",
+  unreadable:
+    "読み取れる内容が見つかりませんでした。写真を撮り直すか、手入力してください。",
+};
+const failed = (reason: OcrFailureReason): ReceiptReadResult => ({
+  ok: false,
+  reason,
+  error: messages[reason],
+  retryable: reason === "busy" || reason === "unreadable",
+});
+
+// 続けて失敗しているときは、しばらく呼び出さない（毎回待たせないため）。
+const BREAKER_FAILURES = 3;
+const BREAKER_WINDOW_MS = 60_000;
+let recentFailures: number[] = [];
+const breakerOpen = (now: number) => {
+  recentFailures = recentFailures.filter((t) => now - t < BREAKER_WINDOW_MS);
+  return recentFailures.length >= BREAKER_FAILURES;
+};
+export const resetReceiptOcrState = () => {
+  recentFailures = [];
+};
 
 export const ocrConfigured = () => !!process.env.ANTHROPIC_API_KEY;
 
@@ -79,17 +116,23 @@ export function normalizeReading(
   return out;
 }
 
+type Deps = {
+  fetcher?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+};
+
 export async function readReceiptWithAi(
   file: { data: Uint8Array; mimeType: string },
-  fetcher: typeof fetch = fetch,
+  deps: Deps = {},
 ): Promise<ReceiptReadResult> {
+  const fetcher = deps.fetcher ?? fetch;
+  const sleep =
+    deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = deps.now ?? Date.now;
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key)
-    return {
-      ok: false,
-      reason: "unconfigured",
-      error: "自動読み取りは、まだ設定されていません。手入力してください。",
-    };
+  if (!key) return failed("unconfigured");
+  if (breakerOpen(now())) return failed("busy");
   const b64 = Buffer.from(file.data).toString("base64");
   const block =
     file.mimeType === "application/pdf"
@@ -101,64 +144,69 @@ export async function readReceiptWithAi(
           type: "image",
           source: { type: "base64", media_type: file.mimeType, data: b64 },
         };
-  try {
-    const res = await fetcher(
-      process.env.ANTHROPIC_MESSAGES_URL || DEFAULT_ENDPOINT,
+  const body = JSON.stringify({
+    model: process.env.RECEIPT_OCR_MODEL || DEFAULT_RECEIPT_MODEL,
+    max_tokens: 400,
+    temperature: 0,
+    system: SYSTEM,
+    messages: [
       {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: process.env.RECEIPT_OCR_MODEL || DEFAULT_RECEIPT_MODEL,
-          max_tokens: 400,
-          temperature: 0,
-          system: SYSTEM,
-          messages: [
-            {
-              role: "user",
-              content: [
-                block,
-                { type: "text", text: "この領収書を読み取ってください。" },
-              ],
-            },
-          ],
-        }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        role: "user",
+        content: [
+          block,
+          { type: "text", text: "この領収書を読み取ってください。" },
+        ],
       },
-    );
-    if (!res.ok) {
-      // 認証・残高・混雑などの詳細は利用者に見せない（ログにも本文は残さない）。
-      console.error("receipt-ocr: upstream status", res.status);
-      return {
-        ok: false,
-        reason: "failed",
-        error: "自動読み取りを利用できませんでした。手入力してください。",
-      };
+    ],
+  });
+  const call = () =>
+    fetcher(process.env.ANTHROPIC_MESSAGES_URL || DEFAULT_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+
+  // 混雑・通信の失敗は、1回だけ待ってやり直す。認証・上限などは、やり直しても同じなので、すぐ諦める。
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await call();
+    } catch {
+      res = null;
     }
-    const body = (await res.json()) as {
+    const transient = !res || res.status === 429 || res.status >= 500;
+    if (!transient) break;
+    if (attempt === 0) await sleep(RETRY_DELAY_MS);
+  }
+  if (!res || res.status === 429 || res.status >= 500) {
+    recentFailures.push(now());
+    if (res) console.error("receipt-ocr: upstream status", res.status);
+    return failed("busy");
+  }
+  if (!res.ok) {
+    // 認証・残高・形式などの詳細は、利用者にもログにも出さない（状態だけ記録する）。
+    console.error("receipt-ocr: upstream status", res.status);
+    recentFailures.push(now());
+    return failed("rejected");
+  }
+  try {
+    const json = (await res.json()) as {
       content?: { type: string; text?: string }[];
     };
-    const text = (body.content ?? [])
+    const text = (json.content ?? [])
       .filter((c) => c.type === "text")
       .map((c) => c.text ?? "")
       .join("");
     const data = normalizeReading(text);
-    if (!Object.keys(data).length)
-      return {
-        ok: false,
-        reason: "failed",
-        error:
-          "読み取れる内容が見つかりませんでした。写真を撮り直すか、手入力してください。",
-      };
+    if (!Object.keys(data).length) return failed("unreadable");
+    recentFailures = [];
     return { ok: true, data };
   } catch {
-    return {
-      ok: false,
-      reason: "failed",
-      error: "読み取りに失敗しました。手入力するか、もう一度お試しください。",
-    };
+    return failed("unreadable");
   }
 }

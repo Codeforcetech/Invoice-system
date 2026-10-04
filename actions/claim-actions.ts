@@ -444,6 +444,7 @@ export async function readClaimReceiptAi(form: FormData) {
       return {
         ok: false as const,
         unconfigured: true,
+        retryable: false,
         error: "自動読み取りは、まだ設定されていません。手入力してください。",
       };
     const f = form.get("receipt");
@@ -456,8 +457,13 @@ export async function readClaimReceiptAi(form: FormData) {
     const r = await readReceiptWithAi(receipt);
     return r.ok
       ? { ok: true as const, data: r.data }
-      : { ok: false as const, unconfigured: false, error: r.error };
+      : {
+          ok: false as const,
+          unconfigured: r.reason === "unconfigured",
+          retryable: r.retryable,
+          error: r.error,
+        };
   } catch (e) {
-    return { ...failure(e), unconfigured: false };
+    return { ...failure(e), unconfigured: false, retryable: false };
   }
 }

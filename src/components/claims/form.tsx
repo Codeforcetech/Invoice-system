@@ -38,6 +38,7 @@ export function ClaimForm({
     [readNote, setReadNote] = useState<{
       tone: "ok" | "warn";
       text: string;
+      retry: boolean;
     } | null>(null);
 
   const setField = (name: string, value: string) => {
@@ -63,13 +64,40 @@ export function ClaimForm({
     return !(el as HTMLInputElement | null)?.value;
   };
 
+  const lastFile = useRef<File | null>(null);
+  /** 自動読み取りが使えなかった・足りなかったとき、手で入れてほしい最初の欄に移る。 */
+  const focusFirstEmpty = () => {
+    for (const name of ["merchant", "date", "amount", "title"]) {
+      if (isEmpty(name)) {
+        (
+          formRef.current?.elements.namedItem(name) as HTMLElement | null
+        )?.focus();
+        return;
+      }
+    }
+  };
+  const missing = () =>
+    [
+      ["merchant", "支払先"],
+      ["date", "日付"],
+      ["amount", "金額"],
+    ]
+      .filter(([n]) => isEmpty(n))
+      .map(([, label]) => label);
+
   /** 選ばれた領収書を入力欄にセットし、読み取れた内容を各項目に入れる。 */
   async function takeFile(file: File | undefined) {
     if (!file || !fileRef.current) return;
     const transfer = new DataTransfer();
     transfer.items.add(file);
     fileRef.current.files = transfer.files;
+    lastFile.current = file;
     setFileName(file.name);
+    await readFrom(file);
+  }
+
+  /** 領収書を読み取る。使えない・読み取れないときも、申請は止めず、手入力へ案内する。 */
+  async function readFrom(file: File) {
     setReadNote(null);
     setReading(true);
     try {
@@ -78,12 +106,15 @@ export function ClaimForm({
       f.set("receipt", file);
       const r = await readClaimReceiptAi(f);
       if (!r.ok) {
+        const need = missing();
         setReadNote({
           tone: "warn",
-          text: r.unconfigured
-            ? "領収書は添付しました。自動読み取りは設定されていないので、項目は手で入力してください。"
-            : `領収書は添付しました。${r.error}`,
+          retry: r.retryable,
+          text: `領収書は添付しました。${r.error}${
+            need.length ? `（入力が必要：${need.join("・")}）` : ""
+          }`,
         });
+        focusFirstEmpty();
         return;
       }
       const d = r.data,
@@ -108,15 +139,22 @@ export function ClaimForm({
         setField("title", (d.note || `${d.merchant}での支払い`).slice(0, 150));
         filled.push("件名");
       }
+      const need = missing();
       setReadNote({
-        tone: "ok",
-        text: `読み取って入力しました（${filled.join("・")}）。間違いがないか、必ず確認してください。`,
+        tone: need.length ? "warn" : "ok",
+        retry: false,
+        text: need.length
+          ? `読み取って入力しました（${filled.join("・")}）。読み取れなかった項目（${need.join("・")}）は、手で入力してください。入力した内容は、必ず確認してください。`
+          : `読み取って入力しました（${filled.join("・")}）。間違いがないか、必ず確認してください。`,
       });
+      if (need.length) focusFirstEmpty();
     } catch {
       setReadNote({
         tone: "warn",
-        text: "領収書は添付しました。自動読み取りに失敗したので、項目は手で入力してください。",
+        retry: true,
+        text: "領収書は添付しました。自動読み取りに失敗したので、項目は手で入力するか、もう一度読み取ってください。",
       });
+      focusFirstEmpty();
     } finally {
       setReading(false);
     }
@@ -284,6 +322,16 @@ export function ClaimForm({
                 }`}
               >
                 {readNote.text}
+                {readNote.retry && lastFile.current && (
+                  <button
+                    type="button"
+                    disabled={reading}
+                    onClick={() => void readFrom(lastFile.current!)}
+                    className="ml-3 rounded-lg border border-amber-400 bg-white px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                  >
+                    もう一度読み取る
+                  </button>
+                )}
               </p>
             )}
             <p className="mt-2 text-xs text-slate-500">
