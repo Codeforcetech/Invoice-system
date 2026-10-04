@@ -678,6 +678,10 @@ model Submission {
   linkId             String?
   /// 外部の人が、承認・差戻しの連絡を受け取るメールアドレス（任意）
   contactEmail       String?
+  /// 請求書のAI読み取りを使って入力したか（承認する人への参考。提出する人の申告）
+  aiAssisted         Boolean           @default(false)
+  /// AI読み取りで、確認が必要だった点（承認する人への参考）
+  aiNote             String            @default("")
   /// 何月分か（YYYY-MM）
   month              String
   title              String

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { loadSubmission } from "@/lib/submissions/queries";
+import { submissionChecks } from "@/lib/submissions/checks";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SubmissionDetail } from "@/components/submissions/submission-detail";
@@ -16,6 +17,7 @@ export default async function ReviewSubmission({
   const { id } = await params;
   const s = await loadSubmission(prisma, ws, id);
   if (!s) notFound();
+  const checks = await submissionChecks(prisma, ws.ownerId, s);
   return (
     <PageShell maxWidth="4xl">
       <SectionHeader
@@ -31,6 +33,19 @@ export default async function ReviewSubmission({
           自分の提出は、承認できません。別の承認者に依頼してください。
         </p>
       ) : null}
+      {checks.length > 0 && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">確認してほしい点</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {checks.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <SubmissionDetail s={s} />
     </PageShell>
   );

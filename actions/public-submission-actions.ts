@@ -8,6 +8,13 @@ import { recordAudit } from "@/lib/workspace/audit";
 import { notifyUsers } from "@/lib/notifications/service";
 import { EvidenceFileError, readEvidenceFile } from "@/lib/evidence/file";
 import {
+  CONSENT_ERROR,
+  NOT_CONFIGURED,
+  readInvoiceFile,
+} from "@/lib/submissions/ai-read";
+import { ocrConfigured } from "@/lib/ocr/anthropic";
+import type { InvoiceReading } from "@/lib/ocr/invoice";
+import {
   clientAddress,
   findActiveLink,
   hashToken,
@@ -167,6 +174,8 @@ export async function submitViaLink(
           month: v.month,
           title: v.title,
           note: v.note,
+          aiAssisted: v.aiAssisted,
+          aiNote: v.aiNote,
           status: "SUBMITTED",
           submittedAt: new Date(),
           subtotal: totals.subtotal,
@@ -348,6 +357,8 @@ export async function resubmitViaLink(
           month: v.month,
           title: v.title,
           note: v.note,
+          aiAssisted: v.aiAssisted,
+          aiNote: v.aiNote,
           contactEmail: v.contactEmail || null,
           status: "SUBMITTED",
           submittedAt: new Date(),
@@ -438,5 +449,98 @@ export async function resubmitViaLink(
     return { ok: true, id: v.id };
   } catch (e) {
     return failure(e);
+  }
+}
+
+export type ReadViaLinkResult =
+  | { ok: true; data: InvoiceReading; duplicate: boolean; left: number }
+  | { ok: false; error: string; retryable: boolean; unconfigured: boolean };
+
+/**
+ * 外部の人が、請求書のPDF・写真をAIで読み取って、入力の下書きにする。
+ * 呼べるのは有効なリンクがある人だけ。リンクごとの回数と、事業所全体の1日の上限がある。
+ * 読み取り結果は下書きで、保存はしない（提出するのは、確認したあとの別の操作）。
+ */
+export async function readInvoiceViaLink(
+  form: FormData,
+): Promise<ReadViaLinkResult> {
+  try {
+    const token = String(form.get("token") ?? "");
+    const link = await gate(token, form);
+    const ip = clientAddress(await headers());
+    if (!(await throttle(prisma, "public-ai-ip", ip, 10, 10 * 60_000)))
+      return refuse(TOO_MANY);
+    if (form.get("consent") !== "1") return refuse(CONSENT_ERROR);
+    if (!ocrConfigured())
+      return {
+        ok: false,
+        error: NOT_CONFIGURED,
+        retryable: false,
+        unconfigured: true,
+      };
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size)
+      return refuse("請求書のファイルを選んでください。");
+
+    // 回数を先に確保する（同時に何件も呼ばれても、上限を超えない）。
+    const take = await prisma.submissionLink.updateMany({
+      where: { id: link.id, aiReadsUsed: { lt: link.aiReadsLimit } },
+      data: { aiReadsUsed: { increment: 1 }, lastUsedAt: new Date() },
+    });
+    if (take.count !== 1)
+      return {
+        ok: false,
+        error:
+          "このリンクで使えるAI読み取りの回数を超えました。手入力してください。",
+        retryable: false,
+        unconfigured: false,
+      };
+    const left = async () =>
+      Math.max(
+        0,
+        link.aiReadsLimit -
+          ((
+            await prisma.submissionLink.findUnique({
+              where: { id: link.id },
+              select: { aiReadsUsed: true },
+            })
+          )?.aiReadsUsed ?? link.aiReadsLimit),
+      );
+    let r;
+    try {
+      r = await readInvoiceFile(prisma, {
+        file,
+        ownerId: link.ownerId,
+        // 重複の目印は、そのリンクの提出だけを見る（他の人の提出の有無は、教えない）。
+        duplicateWhere: { submission: { linkId: link.id } },
+      });
+    } catch (e) {
+      await prisma.submissionLink.updateMany({
+        where: { id: link.id, aiReadsUsed: { gt: 0 } },
+        data: { aiReadsUsed: { decrement: 1 } },
+      });
+      throw e;
+    }
+    if (!r.ok) {
+      if (r.refund)
+        await prisma.submissionLink.updateMany({
+          where: { id: link.id, aiReadsUsed: { gt: 0 } },
+          data: { aiReadsUsed: { decrement: 1 } },
+        });
+      return {
+        ok: false,
+        error: r.error,
+        retryable: r.retryable,
+        unconfigured: r.unconfigured,
+      };
+    }
+    return {
+      ok: true,
+      data: r.data,
+      duplicate: r.duplicate,
+      left: await left(),
+    };
+  } catch (e) {
+    return { ...failure(e), retryable: false, unconfigured: false };
   }
 }

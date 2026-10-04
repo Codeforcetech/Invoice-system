@@ -52,6 +52,11 @@ export function SubmissionDetail({
         <CardSection>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
+              {s.aiAssisted && (
+                <p className="mb-1 ml-1 inline-block rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">
+                  AI読み取りを使用
+                </p>
+              )}
               <p className="text-xs text-slate-500">
                 {s.month.replace("-", "年")}月分
               </p>

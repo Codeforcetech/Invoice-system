@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { findActiveLink } from "@/lib/submissions/link";
 import { loadLinkSubmission } from "@/lib/submissions/public";
 import { SubmissionForm } from "@/components/submissions/submission-form";
+import { ocrConfigured } from "@/lib/ocr/anthropic";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,11 @@ export default async function EditLinkSubmission({
       </Link>
       <h1 className="text-xl font-bold">提出を直して、出し直す</h1>
       <SubmissionForm
+        ai={
+          ocrConfigured() && link.aiReadsLimit > link.aiReadsUsed
+            ? { left: link.aiReadsLimit - link.aiReadsUsed }
+            : undefined
+        }
         initialMonth={s.month}
         external={{
           token,

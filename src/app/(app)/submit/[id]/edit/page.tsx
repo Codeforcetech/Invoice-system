@@ -5,6 +5,7 @@ import { loadSubmission } from "@/lib/submissions/queries";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SubmissionForm } from "@/components/submissions/submission-form";
+import { ocrConfigured } from "@/lib/ocr/anthropic";
 
 export default async function EditSubmission({
   params,
@@ -20,6 +21,7 @@ export default async function EditSubmission({
     <PageShell maxWidth="4xl">
       <SectionHeader variant="page" title="提出の内容を直す" />
       <SubmissionForm
+        ai={ocrConfigured() ? {} : undefined}
         initialMonth={s.month}
         data={{
           id: s.id,

@@ -6,6 +6,7 @@ import { companyNameOf, listLinkSubmissions } from "@/lib/submissions/public";
 import { japanToday } from "@/lib/expenses/model";
 import { yen } from "@/lib/accounting/model";
 import { SubmissionForm } from "@/components/submissions/submission-form";
+import { ocrConfigured } from "@/lib/ocr/anthropic";
 import { StatusBadge } from "@/components/submissions/submission-detail";
 import type { ProfileInput } from "@/lib/submissions/model";
 
@@ -74,6 +75,11 @@ export default async function SubmitViaLinkPage({
         </div>
       )}
       <SubmissionForm
+        ai={
+          ocrConfigured() && link.aiReadsLimit > link.aiReadsUsed
+            ? { left: link.aiReadsLimit - link.aiReadsUsed }
+            : undefined
+        }
         initialMonth={japanToday().slice(0, 7)}
         external={{ token, profile: saved, contactEmail: "" }}
       />

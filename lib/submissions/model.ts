@@ -72,6 +72,9 @@ export const submissionSchema = z.object({
     .array(itemSchema)
     .min(1, "明細を1行以上入力してください")
     .max(MAX_SUBMISSION_ITEMS),
+  /** 請求書のAI読み取りを使ったか、確認が必要だった点（承認する人への参考。画面の申告） */
+  aiAssisted: z.boolean().default(false),
+  aiNote: z.string().trim().max(500).default(""),
 });
 export type SubmissionInput = z.infer<typeof submissionSchema>;
 

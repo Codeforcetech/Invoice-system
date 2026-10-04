@@ -9,6 +9,14 @@ import { recordAudit } from "@/lib/workspace/audit";
 import { accountingLock } from "@/lib/accounting/service";
 import { syncExpense } from "@/lib/accounting/sync";
 import { notifyUsers } from "@/lib/notifications/service";
+import {
+  CONSENT_ERROR,
+  NOT_CONFIGURED,
+  readInvoiceFile,
+} from "@/lib/submissions/ai-read";
+import { throttle } from "@/lib/submissions/link";
+import { ocrConfigured } from "@/lib/ocr/anthropic";
+import type { InvoiceReading } from "@/lib/ocr/invoice";
 import { sendExternalNotice } from "@/lib/notifications/external";
 import { counterpartyKey } from "@/lib/evidence/model";
 import { EvidenceFileError, readEvidenceFile } from "@/lib/evidence/file";
@@ -168,6 +176,8 @@ export async function saveSubmission(
         month: v.month,
         title: v.title,
         note: v.note,
+        aiAssisted: v.aiAssisted,
+        aiNote: v.aiNote,
         subtotal: totals.subtotal,
         taxAmount: totals.taxAmount,
         total: totals.total,
@@ -623,5 +633,48 @@ export async function rejectSubmission(raw: unknown): Promise<Result> {
     return { ok: true };
   } catch (e) {
     return failure(e);
+  }
+}
+
+export type ReadMemberResult =
+  | { ok: true; data: InvoiceReading; duplicate: boolean }
+  | { ok: false; error: string; retryable: boolean; unconfigured: boolean };
+
+/** 提出者（メンバー）が、請求書のPDF・写真をAIで読み取って、入力の下書きにする。保存はしない。 */
+export async function readInvoiceAi(form: FormData): Promise<ReadMemberResult> {
+  try {
+    const ws = await requireWorkspace("SUBMITTER");
+    if (form.get("consent") !== "1") return fail(CONSENT_ERROR);
+    if (!ocrConfigured())
+      return {
+        ok: false,
+        error: NOT_CONFIGURED,
+        retryable: false,
+        unconfigured: true,
+      };
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size)
+      return fail("請求書のファイルを選んでください。");
+    if (!(await throttle(prisma, "ai-member", ws.userId, 20, 3600_000)))
+      return fail(
+        "読み取りの回数が多すぎます。しばらく待ってから、お試しください。",
+      );
+    const r = await readInvoiceFile(prisma, {
+      file,
+      ownerId: ws.ownerId,
+      duplicateWhere: {
+        submission: { ownerId: ws.ownerId, submitterId: ws.userId },
+      },
+    });
+    return r.ok
+      ? { ok: true, data: r.data, duplicate: r.duplicate }
+      : {
+          ok: false,
+          error: r.error,
+          retryable: r.retryable,
+          unconfigured: r.unconfigured,
+        };
+  } catch (e) {
+    return { ...failure(e), retryable: false, unconfigured: false };
   }
 }

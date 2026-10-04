@@ -18,14 +18,18 @@ import { purgeAudit } from "./audit-cleanup";
 import { initializeAccounting } from "@/actions/accounting-actions";
 import {
   approveSubmission,
+  readInvoiceAi,
   rejectSubmission,
 } from "@/actions/submission-actions";
+import { submissionChecks } from "@/lib/submissions/checks";
+import { resetOcrState } from "@/lib/ocr/anthropic";
 import {
   createSubmissionLink,
   extendSubmissionLink,
   revokeSubmissionLink,
 } from "@/actions/submission-link-actions";
 import {
+  readInvoiceViaLink,
   resubmitViaLink,
   submitViaLink,
   withdrawViaLink,
@@ -717,6 +721,236 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();
       }
+    });
+
+    describe("AI reading of invoices", () => {
+      const aiJson = JSON.stringify({
+        senderName: "AI 太郎",
+        address: "東京都",
+        registrationNumber: "T1234567890123",
+        bank: { bankName: "AI銀行" },
+        month: "2026-09",
+        title: "9月分",
+        amountsIncludeTax: false,
+        total: 110000,
+        items: [
+          {
+            name: "制作",
+            quantity: 1,
+            unitPrice: 100000,
+            taxRate: 10,
+            kind: "REWARD",
+          },
+        ],
+      });
+      const stub = (status = 200, body = aiJson) => {
+        const f = vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({ content: [{ type: "text", text: body }] }),
+              { status },
+            ),
+        );
+        vi.stubGlobal("fetch", f);
+        return f;
+      };
+      const readForm = (
+        token: string,
+        file: File | null = receipt("inv"),
+        extra: Record<string, string> = { consent: "1" },
+      ) => {
+        const f = new FormData();
+        f.set("token", token);
+        if (file) f.set("file", file);
+        for (const [k, v] of Object.entries(extra)) f.set(k, v);
+        return f;
+      };
+      const used = async (id: string) =>
+        (await prisma.submissionLink.findUniqueOrThrow({ where: { id } }))
+          .aiReadsUsed;
+      const setup = async (aiReads = 5) => {
+        freshIp();
+        resetOcrState();
+        vi.stubEnv("ANTHROPIC_API_KEY", "k-not-real");
+        as(approver);
+        return ok(createSubmissionLink({ label: "AI", days: 30, aiReads }));
+      };
+      const finish = () => {
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+        resetOcrState();
+      };
+
+      it("needs the sender's consent, a valid link and a file; uses no count when AI is not configured", async () => {
+        const r = await setup();
+        try {
+          stub();
+          expect(
+            await err(readInvoiceViaLink(readForm(r.token, receipt(), {}))),
+          ).toMatch(/同意/);
+          expect(
+            await err(readInvoiceViaLink(readForm("E".repeat(43)))),
+          ).toMatch(/リンクは使えません/);
+          expect(
+            await err(readInvoiceViaLink(readForm(r.token, null))),
+          ).toMatch(/ファイル/);
+          vi.stubEnv("ANTHROPIC_API_KEY", "");
+          expect(await readInvoiceViaLink(readForm(r.token))).toMatchObject({
+            ok: false,
+            unconfigured: true,
+          });
+          expect(await used(r.id)).toBe(0);
+        } finally {
+          finish();
+        }
+      });
+
+      it("reads an invoice into a draft, counts the use, and keeps nothing saved", async () => {
+        const r = await setup();
+        try {
+          const f = stub();
+          const before = await prisma.submission.count({
+            where: { linkId: r.id },
+          });
+          const res = await readInvoiceViaLink(readForm(r.token));
+          expect(res).toMatchObject({ ok: true, duplicate: false, left: 4 });
+          expect(res.ok && res.data.profile.legalName).toBe("AI 太郎");
+          expect(res.ok && res.data.items[0]).toMatchObject({
+            unitPrice: 100000,
+            taxCategory: "TAXABLE_10",
+          });
+          expect(await used(r.id)).toBe(1);
+          expect(f).toHaveBeenCalledTimes(1);
+          expect(
+            await prisma.submission.count({ where: { linkId: r.id } }),
+          ).toBe(before);
+        } finally {
+          finish();
+        }
+      });
+
+      it("limits readings per link, and gives the count back when the failure is not the sender's fault", async () => {
+        const r = await setup(2);
+        try {
+          stub();
+          await ok(readInvoiceViaLink(readForm(r.token)));
+          await ok(readInvoiceViaLink(readForm(r.token)));
+          expect(await readInvoiceViaLink(readForm(r.token))).toMatchObject({
+            ok: false,
+            error: expect.stringMatching(/回数を超えました/),
+          });
+          expect(await used(r.id)).toBe(2);
+          // 混雑で失敗 → 回数は戻る
+          const r2 = await setup(2);
+          stub(503);
+          const sleepless = await readInvoiceViaLink(readForm(r2.token));
+          expect(sleepless).toMatchObject({ ok: false, retryable: true });
+          expect(await used(r2.id)).toBe(0);
+          // 読み取れなかった（画像のせい）→ 回数は戻さない
+          const r3 = await setup(2);
+          stub(200, "読めません");
+          expect(await readInvoiceViaLink(readForm(r3.token))).toMatchObject({
+            ok: false,
+          });
+          expect(await used(r3.id)).toBe(1);
+        } finally {
+          finish();
+        }
+      });
+
+      it("stops at the workspace's daily limit", async () => {
+        const r = await setup();
+        try {
+          stub();
+          await prisma.publicThrottle.deleteMany({});
+          vi.stubEnv("INVOICE_OCR_DAILY_LIMIT", "1");
+          await ok(readInvoiceViaLink(readForm(r.token)));
+          expect(await readInvoiceViaLink(readForm(r.token))).toMatchObject({
+            ok: false,
+            error: expect.stringMatching(/本日.*上限/),
+          });
+          expect(await used(r.id)).toBe(1); // 2回目は回数を戻している
+        } finally {
+          finish();
+        }
+      });
+
+      it("tells the sender when the same file was already submitted on this link, but not about other links", async () => {
+        const r = await setup();
+        const other = await ok(createSubmissionLink({ label: "別", days: 30 }));
+        try {
+          stub();
+          await ok(submitViaLink(form(r.token, {}, [receipt("same")])));
+          expect(
+            await readInvoiceViaLink(readForm(r.token, receipt("same"))),
+          ).toMatchObject({ ok: true, duplicate: true });
+          expect(
+            await readInvoiceViaLink(readForm(other.token, receipt("same"))),
+          ).toMatchObject({ ok: true, duplicate: false });
+        } finally {
+          finish();
+        }
+      });
+
+      it("works for a contractor member too (consent required, nothing saved)", async () => {
+        freshIp();
+        resetOcrState();
+        vi.stubEnv("ANTHROPIC_API_KEY", "k-not-real");
+        try {
+          stub();
+          as(worker);
+          const mk = (extra: Record<string, string>) => {
+            const f = new FormData();
+            f.set("file", receipt("m1"));
+            for (const [k, v] of Object.entries(extra)) f.set(k, v);
+            return f;
+          };
+          expect(await err(readInvoiceAi(mk({})))).toMatch(/同意/);
+          expect(await readInvoiceAi(mk({ consent: "1" }))).toMatchObject({
+            ok: true,
+          });
+          as(approver);
+          expect(await readInvoiceAi(mk({ consent: "1" }))).toMatchObject({
+            ok: true,
+          }); // 上位の役割も使える
+        } finally {
+          finish();
+        }
+      });
+
+      it("keeps the AI flag on the submission, and shows reviewers the checks (AI note, same file, same sender/month/amount)", async () => {
+        const r = await setup();
+        try {
+          const f1 = form(
+            r.token,
+            { aiAssisted: true, aiNote: "税込から換算" },
+            [receipt("dup")],
+          );
+          const id1 = JSON.parse(String(f1.get("payload"))).id as string;
+          await ok(submitViaLink(f1));
+          const f2 = form(r.token, {}, [receipt("dup")]);
+          const id2 = JSON.parse(String(f2.get("payload"))).id as string;
+          await ok(submitViaLink(f2));
+          const load = (id: string) =>
+            prisma.submission.findUniqueOrThrow({
+              where: { id },
+              include: { files: { select: { id: true } } },
+            });
+          const s1 = await load(id1);
+          expect(s1).toMatchObject({
+            aiAssisted: true,
+            aiNote: "税込から換算",
+          });
+          const c1 = await submissionChecks(prisma, owner, s1);
+          expect(c1.join("|")).toMatch(/同じファイル/);
+          expect(c1.join("|")).toMatch(/同じ差出人・同じ月・同じ金額/);
+          expect(c1.join("|")).toMatch(/AI読み取りを使いました.*税込から換算/);
+          const c2 = await submissionChecks(prisma, owner, await load(id2));
+          expect(c2.join("|")).not.toMatch(/AI読み取り/);
+        } finally {
+          finish();
+        }
+      });
     });
 
     it("counts requests per window and resets after it", async () => {

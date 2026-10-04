@@ -1,8 +1,13 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveSubmission, submitSubmission } from "@/actions/submission-actions";
 import {
+  readInvoiceAi,
+  saveSubmission,
+  submitSubmission,
+} from "@/actions/submission-actions";
+import {
+  readInvoiceViaLink,
   resubmitViaLink,
   submitViaLink,
 } from "@/actions/public-submission-actions";
@@ -68,11 +73,14 @@ export function SubmissionForm({
   initialMonth,
   data,
   external,
+  ai,
 }: {
   initialMonth: string;
   data?: SubmissionFormData;
   /** 外部の提出リンク（ログインなし）から開いたとき。差出人の情報も、ここで入力する。 */
   external?: { token: string; profile: ProfileInput; contactEmail: string };
+  /** 請求書のAI読み取り。サーバーで利用できるときだけ渡す（left は外部リンクの残り回数）。 */
+  ai?: { left?: number };
 }) {
   const router = useRouter();
   const [id] = useState(() => data?.id ?? crypto.randomUUID());
@@ -104,6 +112,19 @@ export function SubmissionForm({
     external?.profile ?? null,
   );
   const [email, setEmail] = useState(external?.contactEmail ?? "");
+  // 請求書のAI読み取り
+  const [consent, setConsent] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiUsed, setAiUsed] = useState(false);
+  const [aiNote, setAiNote] = useState("");
+  const [aiLeft, setAiLeft] = useState<number | undefined>(ai?.left);
+  const [aiMsg, setAiMsg] = useState<{
+    tone: "ok" | "warn";
+    lines: string[];
+    retry: boolean;
+  } | null>(null);
+  const aiFile = useRef<File | null>(null);
+  const aiPicker = useRef<HTMLInputElement>(null);
 
   const parsed = rows.map((r) => ({
     ...r,
@@ -132,6 +153,107 @@ export function SubmissionForm({
     setFresh((f) => [...f, ...Array.from(list)].slice(0, MAX_SUBMISSION_FILES));
   };
 
+  const isBlankRow = (r: Row) => !r.name.trim() && !r.unitPrice.trim();
+  /** 請求書のPDF・写真をAIで読み取り、入力欄に下書きを入れる。原本は添付として残す。 */
+  async function readInvoice(file: File) {
+    if (!consent)
+      return setAiMsg({
+        tone: "warn",
+        lines: ["読み取りを使うには、上の同意にチェックしてください。"],
+        retry: false,
+      });
+    aiFile.current = file;
+    // 原本は、読み取れても読み取れなくても添付として残す。
+    setFresh((f) =>
+      f.some((x) => x.name === file.name && x.size === file.size)
+        ? f
+        : [...f, file].slice(0, MAX_SUBMISSION_FILES),
+    );
+    setAiBusy(true);
+    setAiMsg(null);
+    try {
+      const f = new FormData();
+      f.set("consent", "1");
+      f.set("file", file);
+      if (external) {
+        f.set("token", external.token);
+        f.set("website", honeypot.current?.value ?? "");
+      }
+      const r = await (external ? readInvoiceViaLink(f) : readInvoiceAi(f));
+      if (!r.ok) {
+        setAiMsg({
+          tone: "warn",
+          retry: r.retryable,
+          lines: [
+            `請求書は添付しました。${r.error}`,
+            "下の入力欄に、請求書を見ながら入力してください。",
+          ],
+        });
+        return;
+      }
+      const d = r.data;
+      if ("left" in r && typeof r.left === "number") setAiLeft(r.left);
+      if (d.month) setMonth(d.month);
+      if (d.title && !title.trim()) setTitle(d.title);
+      if (d.items.length) {
+        const blank = rows.every(isBlankRow);
+        if (
+          blank ||
+          confirm(
+            "いまの請求の内容を、読み取った内容に置き換えます。よろしいですか？",
+          )
+        )
+          setRows(
+            d.items.map((i) => ({
+              key: crypto.randomUUID(),
+              kind: i.kind,
+              name: i.name,
+              quantity: String(i.quantity),
+              unitPrice: String(i.unitPrice),
+              taxCategory: i.taxCategory,
+              note: "",
+            })),
+          );
+      }
+      if (external && profile)
+        setProfile((p) => {
+          if (!p) return p;
+          const next = { ...p };
+          for (const [k, v] of Object.entries(d.profile) as [
+            keyof ProfileInput,
+            string,
+          ][])
+            if (v && !next[k].trim()) next[k] = v;
+          return next;
+        });
+      setAiUsed(true);
+      setAiNote(d.warnings.join("／").slice(0, 500));
+      setAiMsg({
+        tone: d.warnings.length || r.duplicate ? "warn" : "ok",
+        retry: false,
+        lines: [
+          "読み取って入力しました。AIの読み取りは間違うことがあります。請求書と見比べて、必ず確認してください。",
+          ...(r.duplicate
+            ? [
+                "同じファイルを、すでに提出しています。二重の提出でないか確認してください。",
+              ]
+            : []),
+          ...d.warnings,
+        ],
+      });
+    } catch {
+      setAiMsg({
+        tone: "warn",
+        retry: true,
+        lines: [
+          "請求書は添付しました。読み取りに失敗したので、手で入力するか、もう一度お試しください。",
+        ],
+      });
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   async function save(thenSubmit: boolean) {
     setBusy(true);
     setError("");
@@ -147,6 +269,8 @@ export function SubmissionForm({
             month,
             title: title.trim() || `${month.replace("-", "年")}月分の請求書`,
             note,
+            aiAssisted: aiUsed,
+            aiNote,
             profile,
             contactEmail: email,
             items: rows.map((r) => ({
@@ -176,6 +300,8 @@ export function SubmissionForm({
           month,
           title: title.trim() || `${month.replace("-", "年")}月分の請求書`,
           note,
+          aiAssisted: aiUsed,
+          aiNote,
           items: rows.map((r) => ({
             kind: r.kind,
             name: r.name,
@@ -224,6 +350,76 @@ export function SubmissionForm({
           </p>
           <p className="mt-1 whitespace-pre-wrap">理由：{data.rejectReason}</p>
         </div>
+      )}
+      {ai && (
+        <Card>
+          <CardSection>
+            <h2 className="font-semibold">
+              請求書のPDF・写真から入力する（AI）
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              お手持ちの請求書（形式は自由）を選ぶと、AIが読み取って、下の入力欄に下書きを入れます。必ず内容を確認してから、提出してください。読み取れなくても、手入力で提出できます。
+              {typeof aiLeft === "number" ? `（あと${aiLeft}回）` : ""}
+            </p>
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                請求書の内容（氏名・住所・振込先などを含みます）を、読み取りのために外部のAIサービス（Anthropic）に送ることに同意します。
+              </span>
+            </label>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={!consent || aiBusy || aiLeft === 0}
+                onClick={() => aiPicker.current?.click()}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                {aiBusy
+                  ? "読み取っています…"
+                  : "請求書のファイルを選んで読み取る"}
+              </button>
+              <input
+                ref={aiPicker}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void readInvoice(file);
+                }}
+              />
+            </div>
+            {aiMsg && (
+              <div
+                role="status"
+                className={`mt-3 rounded-lg p-3 text-sm ${aiMsg.tone === "ok" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+              >
+                <ul className="list-disc space-y-1 pl-5">
+                  {aiMsg.lines.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                </ul>
+                {aiMsg.retry && aiFile.current && (
+                  <button
+                    type="button"
+                    disabled={aiBusy}
+                    onClick={() => void readInvoice(aiFile.current!)}
+                    className="mt-2 rounded-lg border border-amber-400 bg-white px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                  >
+                    もう一度読み取る
+                  </button>
+                )}
+              </div>
+            )}
+          </CardSection>
+        </Card>
       )}
       {external && profile && (
         <Card>
