@@ -40,6 +40,12 @@ export const navigation: {
     group: "ワークスペース",
   },
   {
+    href: "/accounting/sales-table",
+    label: "売上管理表",
+    icon: "invoice",
+    group: "ワークスペース",
+  },
+  {
     href: "/companies",
     label: "取引先",
     icon: "company",
@@ -72,6 +78,12 @@ export const navigation: {
   },
   { href: "/guide", label: "使い方ガイド", icon: "book", group: "サポート" },
 ];
+/** いまの画面に当てはまる項目。入れ子の画面（会計・帳簿 と 売上管理表）は、いちばん細かい項目を選ぶ。 */
+export function currentEntry(pathname: string, entries: typeof navigation) {
+  return entries
+    .filter((n) => pathname === n.href || pathname.startsWith(n.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+}
 /** 経費精算の申請メンバーでもある提出者に、足すメニュー。 */
 export const submitterClaimsEntry: (typeof navigation)[number] = {
   href: "/claims",
@@ -100,6 +112,8 @@ export function SidebarContent(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
+  /** 承認者以上（売上管理表を出す） */
+  approver?: boolean;
   submitter?: boolean;
   /** 提出者のうち、経費精算の申請メンバーでもある人 */
   claims?: boolean;
@@ -115,7 +129,12 @@ export function SidebarContent(props: {
           ...submitterNavigation.slice(1),
         ]
       : submitterNavigation
-    : navigation.filter((n) => props.showAdmin || n.href !== "/admin/users");
+    : navigation.filter(
+        (n) =>
+          (props.showAdmin || n.href !== "/admin/users") &&
+          (props.approver !== false || n.href !== "/accounting/sales-table"),
+      );
+  const here = currentEntry(pathname, entries);
   return (
     <div className="flex h-full flex-col px-5 pb-5 pt-8">
       <Link
@@ -149,8 +168,7 @@ export function SidebarContent(props: {
               {entries
                 .filter((n) => n.group === group)
                 .map((n) => {
-                  const active =
-                    pathname === n.href || pathname.startsWith(n.href + "/");
+                  const active = here?.href === n.href;
                   return (
                     <Link
                       key={n.href}
@@ -206,6 +224,7 @@ export function AppSidebar(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
+  approver?: boolean;
   submitter?: boolean;
   claims?: boolean;
   memberRole?: string;

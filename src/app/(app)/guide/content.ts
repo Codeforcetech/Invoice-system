@@ -170,6 +170,12 @@ export const menuGuide: {
     role: "全員（入力・管理は権限による）",
   },
   {
+    name: "売上管理表",
+    text: "取引先・店舗ごとの、月別の売上と費用を1年分の表で確認。数字を押すと明細が開き、CSVでも出力できます。",
+    href: "/accounting/sales-table",
+    role: "承認者以上",
+  },
+  {
     name: "取引先",
     text: "請求先の情報を登録。請求書の作成画面で選べるようになります。",
     href: "/companies",

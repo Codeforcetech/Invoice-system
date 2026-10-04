@@ -4,11 +4,17 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { AppIcon } from "@/components/ui/app-icon";
-import { navigation, submitterNavigation, SidebarContent } from "./app-sidebar";
+import {
+  currentEntry,
+  navigation,
+  submitterNavigation,
+  SidebarContent,
+} from "./app-sidebar";
 export function MobileAppHeader({
   email = "",
   showAdmin = false,
   canEdit = true,
+  approver = true,
   submitter = false,
   claims = false,
   memberRole,
@@ -17,6 +23,7 @@ export function MobileAppHeader({
   email?: string;
   showAdmin?: boolean;
   canEdit?: boolean;
+  approver?: boolean;
   submitter?: boolean;
   claims?: boolean;
   memberRole?: string;
@@ -36,8 +43,9 @@ export function MobileAppHeader({
       document.body.style.overflow = old;
     };
   }, [open]);
-  const current = (submitter ? submitterNavigation : navigation).find(
-    (n) => pathname === n.href || pathname.startsWith(n.href + "/"),
+  const current = currentEntry(
+    pathname,
+    submitter ? submitterNavigation : navigation,
   );
   return (
     <>
@@ -108,6 +116,7 @@ export function MobileAppHeader({
           email={email}
           showAdmin={showAdmin}
           canEdit={canEdit}
+          approver={approver}
           submitter={submitter}
           claims={claims}
           memberRole={memberRole}
