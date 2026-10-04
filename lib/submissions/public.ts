@@ -48,11 +48,14 @@ export async function loadLinkSubmission(db: Db, link: Link, id: string) {
   return {
     ...row,
     mine: true,
-    // 外部の人には、管理者の名前は見せない。
-    events: row.events.map((e) => ({
-      ...e,
-      actorName: e.actorId.startsWith("link:") ? "あなた" : "管理者",
-    })),
+    // 管理者向けの内部の情報（支払管理への反映、メール送信の結果）は、外部の人には見せない。
+    expenses: [],
+    events: row.events
+      .filter((e) => e.action !== "MAIL")
+      .map((e) => ({
+        ...e,
+        actorName: e.actorId.startsWith("link:") ? "あなた" : "管理者",
+      })),
   };
 }
 

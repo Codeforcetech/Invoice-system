@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ id: "lnk-test-owner" }));
-const net = vi.hoisted(() => ({ ip: "203.0.113.1" }));
+const net = vi.hoisted(() => ({ ip: "203.0.113.1" as string | null }));
 vi.mock("@/lib/auth/require-user", () => ({
   requireUser: async () => ({ id: auth.id }),
 }));
@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ "x-forwarded-for": net.ip }),
+  headers: async () => new Headers(net.ip ? { "x-forwarded-for": net.ip } : {}),
 }));
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
@@ -41,6 +41,7 @@ import {
   linkStatus,
   throttle,
 } from "@/lib/submissions/link";
+import { loadLinkSubmission } from "@/lib/submissions/public";
 
 const owner = "lnk-test-owner",
   approver = "lnk-test-approver",
@@ -950,6 +951,204 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
         } finally {
           finish();
         }
+      });
+    });
+
+    describe("hardening (found in the 6-4 review)", () => {
+      const sha = (v: string) => createHash("sha256").update(v).digest("hex");
+
+      it("hides administrator-only details from the sender's own view (payments, mail results, other links' submissions)", async () => {
+        freshIp();
+        as(approver);
+        const r = await ok(createSubmissionLink({ label: "見え方", days: 30 }));
+        const other = await ok(
+          createSubmissionLink({ label: "別の人", days: 30 }),
+        );
+        const b = form(
+          r.token,
+          {
+            items: [
+              item(),
+              item({
+                kind: "TRANSPORT",
+                name: "電車代",
+                unitPrice: 1000,
+                taxCategory: "EXEMPT",
+              }),
+            ],
+          },
+          [receipt("v")],
+        );
+        const id = JSON.parse(String(b.get("payload"))).id as string;
+        await ok(submitViaLink(b));
+        const version = (
+          await prisma.submission.findUniqueOrThrow({ where: { id } })
+        ).updatedAt.toISOString();
+        await ok(approveSubmission({ id, version }));
+        const link = await prisma.submissionLink.findUniqueOrThrow({
+          where: { id: r.id },
+        });
+        const mine = await loadLinkSubmission(prisma, link, id);
+        expect(mine?.events.map((e) => e.action)).toEqual([
+          "SUBMIT",
+          "APPROVE",
+        ]);
+        expect(mine?.events.map((e) => e.actorName)).toEqual([
+          "あなた",
+          "管理者",
+        ]);
+        expect(mine?.expenses).toEqual([]);
+        expect(
+          await prisma.submissionEvent.count({
+            where: { submissionId: id, action: "MAIL" },
+          }),
+        ).toBe(1); // 管理者側には記録がある
+        const otherLink = await prisma.submissionLink.findUniqueOrThrow({
+          where: { id: other.id },
+        });
+        expect(await loadLinkSubmission(prisma, otherLink, id)).toBeNull();
+      });
+
+      it("does not count a re-sent submission against the link's total", async () => {
+        freshIp();
+        as(approver);
+        const r = await ok(createSubmissionLink({ label: "再送", days: 30 }));
+        const id = crypto.randomUUID();
+        await ok(submitViaLink(form(r.token, { id })));
+        await ok(submitViaLink(form(r.token, { id })));
+        await ok(submitViaLink(form(r.token, { id })));
+        expect(
+          (
+            await prisma.submissionLink.findUniqueOrThrow({
+              where: { id: r.id },
+            })
+          ).submissionCount,
+        ).toBe(1);
+      });
+
+      it("keeps the pending limit even when many submissions arrive at the same moment", async () => {
+        freshIp();
+        as(approver);
+        const r = await ok(createSubmissionLink({ label: "同時", days: 30 }));
+        const results = await Promise.all(
+          Array.from({ length: 6 }, () => submitViaLink(form(r.token))),
+        );
+        expect(results.filter((x) => x.ok)).toHaveLength(3);
+        expect(
+          await prisma.submission.count({
+            where: { linkId: r.id, status: "SUBMITTED" },
+          }),
+        ).toBe(3);
+        expect(
+          (
+            await prisma.submissionLink.findUniqueOrThrow({
+              where: { id: r.id },
+            })
+          ).submissionCount,
+        ).toBe(3);
+      });
+
+      it("keeps the AI reading limit even when readings arrive at the same moment", async () => {
+        freshIp();
+        resetOcrState();
+        vi.stubEnv("ANTHROPIC_API_KEY", "k-not-real");
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(
+            async () =>
+              new Response(
+                JSON.stringify({
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        senderName: "X",
+                        items: [{ name: "a", unitPrice: 100 }],
+                      }),
+                    },
+                  ],
+                }),
+                { status: 200 },
+              ),
+          ),
+        );
+        try {
+          as(approver);
+          const r = await ok(
+            createSubmissionLink({ label: "AI同時", days: 30, aiReads: 2 }),
+          );
+          const mk = () => {
+            const f = new FormData();
+            f.set("token", r.token);
+            f.set("consent", "1");
+            f.set("file", receipt("p"));
+            return f;
+          };
+          const results = await Promise.all(
+            Array.from({ length: 5 }, () => readInvoiceViaLink(mk())),
+          );
+          expect(results.filter((x) => x.ok)).toHaveLength(2);
+          expect(
+            (
+              await prisma.submissionLink.findUniqueOrThrow({
+                where: { id: r.id },
+              })
+            ).aiReadsUsed,
+          ).toBe(2);
+        } finally {
+          vi.unstubAllGlobals();
+          vi.unstubAllEnvs();
+          resetOcrState();
+        }
+      });
+
+      it("blocks a sender that keeps trying invalid links, even for a valid one afterwards (and not other senders)", async () => {
+        as(approver);
+        const r = await ok(createSubmissionLink({ label: "試行", days: 30 }));
+        net.ip = "192.0.2.201";
+        await prisma.publicThrottle.deleteMany({});
+        for (let i = 0; i < 30; i++) await submitViaLink(form("F".repeat(43)));
+        expect(await err(submitViaLink(form(r.token)))).toMatch(
+          /操作が多すぎます/,
+        );
+        net.ip = "192.0.2.202"; // 別の送り元は、影響を受けない
+        await ok(submitViaLink(form(r.token)));
+      });
+
+      it("does not lump senders without an address into one shared bucket (nobody can lock everyone out)", async () => {
+        as(approver);
+        net.ip = null;
+        await prisma.publicThrottle.deleteMany({});
+        const msgs: string[] = [];
+        for (let i = 0; i < 40; i++) {
+          const x = await submitViaLink(
+            form(`G${String(i).padStart(2, "0")}`.padEnd(43, "x")),
+          );
+          msgs.push(x.ok ? "ok" : x.error);
+        }
+        expect(msgs.some((m) => m.includes("操作が多すぎます"))).toBe(false);
+        const r = await ok(createSubmissionLink({ label: "不明", days: 30 }));
+        await ok(submitViaLink(form(r.token)));
+      });
+
+      it("has a global ceiling, so rotating spoofed addresses cannot flood the entrance", async () => {
+        as(approver);
+        const r = await ok(createSubmissionLink({ label: "全体", days: 30 }));
+        await prisma.publicThrottle.deleteMany({});
+        await prisma.publicThrottle.create({
+          data: {
+            key: sha("public-global:all"),
+            windowStart: new Date(),
+            count: 600,
+          },
+        });
+        freshIp();
+        expect(await err(submitViaLink(form(r.token)))).toMatch(
+          /操作が多すぎます/,
+        );
+        await prisma.publicThrottle.deleteMany({});
+        freshIp();
+        await ok(submitViaLink(form(r.token)));
       });
     });
 

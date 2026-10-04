@@ -37,6 +37,8 @@ export const submissionStatusLabel: Record<string, string> = {
 };
 export const MAX_SUBMISSION_ITEMS = 30;
 export const MAX_SUBMISSION_FILES = 10;
+/** 1回の送信で送れる添付の合計（サーバー処理の受け取り上限は4MBなので、余裕をみる）。 */
+export const MAX_SUBMISSION_UPLOAD_BYTES = 3.5 * 1024 * 1024;
 
 const month = z
   .string()

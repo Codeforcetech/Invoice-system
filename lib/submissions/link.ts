@@ -62,6 +62,8 @@ export async function throttle(
       "count" = CASE WHEN "PublicThrottle"."windowStart" <= ${new Date(+now - windowMs)} THEN 1 ELSE "PublicThrottle"."count" + 1 END,
       "windowStart" = CASE WHEN "PublicThrottle"."windowStart" <= ${new Date(+now - windowMs)} THEN ${now} ELSE "PublicThrottle"."windowStart" END
     RETURNING "count"`;
+  // 偽装した送り元で、制限用の表が増え続けないように、ときどき古い行を消す。
+  if (Math.random() < 0.02) await purgeThrottle(db).catch(() => {});
   return (rows[0]?.count ?? 1) <= limit;
 }
 
@@ -72,10 +74,32 @@ export async function purgeThrottle(db: Db, olderThanMs = 24 * 3600_000) {
   });
 }
 
-/** リクエストの送り元（プロキシが付けるヘッダーの先頭）。ホスティング環境のプロキシを前提にした目安。 */
-export function clientAddress(h: Headers) {
-  const f = h.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return (f || h.get("x-real-ip") || "unknown").slice(0, 64);
+/**
+ * リクエストの送り元（プロキシが付けるヘッダーの先頭）。
+ * ヘッダーがないときは null を返す（「不明」を1つの枠にまとめると、1人が枠を使い切るだけで、全員が止まってしまうため。
+ * その場合は、送り元ごとの制限は行わず、リンクごと・全体の制限だけで守る）。
+ */
+export function clientAddress(h: Headers): string | null {
+  const f = (
+    h.get("x-forwarded-for")?.split(",")[0] ??
+    h.get("x-real-ip") ??
+    ""
+  ).trim();
+  return f ? f.slice(0, 64) : null;
+}
+
+/** 回数を増やさずに、いま上限に達しているかだけを確認する。 */
+export async function throttleBlocked(
+  db: Db,
+  scope: string,
+  who: string,
+  limit: number,
+  windowMs: number,
+  now = new Date(),
+): Promise<boolean> {
+  const key = createHash("sha256").update(`${scope}:${who}`).digest("hex");
+  const row = await db.publicThrottle.findUnique({ where: { key } });
+  return !!row && +row.windowStart > +now - windowMs && row.count >= limit;
 }
 
 /** リンクの残り日数（今日を含めず、切り上げ）。 */

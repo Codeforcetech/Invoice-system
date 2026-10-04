@@ -13,6 +13,7 @@ import {
 } from "@/actions/public-submission-actions";
 import {
   MAX_SUBMISSION_FILES,
+  MAX_SUBMISSION_UPLOAD_BYTES,
   SUBMISSION_KINDS,
   defaultTaxFor,
   needsReceipt,
@@ -255,6 +256,11 @@ export function SubmissionForm({
   }
 
   async function save(thenSubmit: boolean) {
+    // 一度に送れる添付の合計には上限がある。分かりにくいエラーになる前に、案内する。
+    if (fresh.reduce((n, f) => n + f.size, 0) > MAX_SUBMISSION_UPLOAD_BYTES)
+      return setError(
+        "新しく追加した添付の合計が大きすぎます（一度に送れるのは合計3.5MBまで）。写真を小さくするか、何回かに分けて追加してください。",
+      );
     setBusy(true);
     setError("");
     try {

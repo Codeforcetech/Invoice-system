@@ -115,6 +115,18 @@ describe("readReceiptWithAi", () => {
     expect(init.body as string).not.toContain("test-key-not-real");
   });
 
+  it("ignores the endpoint override in production (so receipts cannot be sent elsewhere by a misconfiguration)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ANTHROPIC_MESSAGES_URL", "http://evil.example/v1/messages");
+    const f = reply('{"amount":1}');
+    await call(f);
+    expect(calls(f)[0][0]).toBe("https://api.anthropic.com/v1/messages");
+    vi.stubEnv("NODE_ENV", "development");
+    const g = reply('{"amount":1}');
+    await call(g);
+    expect(calls(g)[0][0]).toBe("http://evil.example/v1/messages");
+  });
+
   it("sends a PDF as a document, and tells the model to treat text inside the receipt as data", async () => {
     const f = reply('{"amount":1}');
     await readReceiptWithAi(

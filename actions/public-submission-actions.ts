@@ -19,6 +19,7 @@ import {
   findActiveLink,
   hashToken,
   throttle,
+  throttleBlocked,
 } from "@/lib/submissions/link";
 import {
   MAX_SUBMISSION_FILES,
@@ -97,11 +98,19 @@ async function prepare(form: FormData) {
   return { v, read, totals };
 }
 
-/** 入口の確認（送り元・リンクごとの制限、自動送信の罠、リンクの有効性）。通ったときだけ、リンクを返す。 */
+/** 入口の確認（全体・送り元・リンクごとの制限、自動送信の罠、リンクの有効性）。通ったときだけ、リンクを返す。 */
 async function gate(token: string, form?: FormData) {
   const ip = clientAddress(await headers());
-  if (!(await throttle(prisma, "public-submit-ip", ip, 20, 10 * 60_000)))
+  // 全体の上限：偽装した送り元を使い分けても、入口全体の負荷と費用は、これで頭打ちになる。
+  if (!(await throttle(prisma, "public-global", "all", 600, 10 * 60_000)))
     return refuse(TOO_MANY);
+  if (ip) {
+    // 無効なリンクを何度も試した送り元は、有効なリンクでも、しばらく止める。
+    if (await throttleBlocked(prisma, "public-bad-link", ip, 30, 3600_000))
+      return refuse(TOO_MANY);
+    if (!(await throttle(prisma, "public-submit-ip", ip, 20, 10 * 60_000)))
+      return refuse(TOO_MANY);
+  }
   if (
     !(await throttle(
       prisma,
@@ -117,7 +126,7 @@ async function gate(token: string, form?: FormData) {
     return refuse(LINK_INVALID);
   const link = await findActiveLink(prisma, token);
   if (!link) {
-    await throttle(prisma, "public-bad-link", ip, 30, 3600_000);
+    if (ip) await throttle(prisma, "public-bad-link", ip, 30, 3600_000);
     return refuse(LINK_INVALID);
   }
   return link;
@@ -135,6 +144,15 @@ export async function submitViaLink(
       return refuse("交通費・経費の明細があるので、領収書を添付してください。");
 
     const id = await prisma.$transaction(async (tx) => {
+      // 同じ送信の再送は、回数にも数えず、二重に登録しない（先に調べる）。
+      const existing = await tx.submission.findUnique({
+        where: { id: v.id },
+        select: { linkId: true },
+      });
+      if (existing) {
+        if (existing.linkId !== link.id) return refuse(LINK_INVALID);
+        return v.id; // 同じ送信の再送は、二重に登録しない
+      }
       // リンクの行を更新して、同時の送信を1件ずつにそろえる（上限の判定がすり抜けないように）。
       const lock = await tx.submissionLink.updateMany({
         where: {
@@ -149,14 +167,6 @@ export async function submitViaLink(
         return refuse(
           "このリンクからは、これ以上提出できません。送ってくれた方に、確認してください。",
         );
-      const existing = await tx.submission.findUnique({
-        where: { id: v.id },
-        select: { linkId: true },
-      });
-      if (existing) {
-        if (existing.linkId !== link.id) return refuse(LINK_INVALID);
-        return v.id; // 同じ送信の再送は、二重に登録しない
-      }
       const pending = await tx.submission.count({
         where: { linkId: link.id, status: "SUBMITTED" },
       });
@@ -468,7 +478,7 @@ export async function readInvoiceViaLink(
     const token = String(form.get("token") ?? "");
     const link = await gate(token, form);
     const ip = clientAddress(await headers());
-    if (!(await throttle(prisma, "public-ai-ip", ip, 10, 10 * 60_000)))
+    if (ip && !(await throttle(prisma, "public-ai-ip", ip, 10, 10 * 60_000)))
       return refuse(TOO_MANY);
     if (form.get("consent") !== "1") return refuse(CONSENT_ERROR);
     if (!ocrConfigured())

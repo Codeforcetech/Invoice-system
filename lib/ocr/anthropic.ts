@@ -59,6 +59,12 @@ export const markOcrSuccess = () => {
   recentFailures = [];
 };
 
+/** 接続先。上書き（テスト・開発用）は、本番では使わない（誤設定で、読み取りの内容が別の場所へ送られないように）。 */
+const endpoint = () =>
+  process.env.NODE_ENV !== "production" && process.env.ANTHROPIC_MESSAGES_URL
+    ? process.env.ANTHROPIC_MESSAGES_URL
+    : DEFAULT_ENDPOINT;
+
 export const ocrConfigured = () => !!process.env.ANTHROPIC_API_KEY;
 
 export type OcrDeps = {
@@ -112,7 +118,7 @@ export async function askVision(
     ],
   });
   const call = () =>
-    fetcher(process.env.ANTHROPIC_MESSAGES_URL || DEFAULT_ENDPOINT, {
+    fetcher(endpoint(), {
       method: "POST",
       headers: {
         "content-type": "application/json",

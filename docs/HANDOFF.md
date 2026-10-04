@@ -95,6 +95,7 @@ npx vitest run --maxWorkers=3
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Gmail下書きを使う場合 | Google OAuth のクライアントID（公開してよい値）。Google Cloud で Gmail API を有効にし、本番ドメインを JavaScript の承認済みオリジンに登録する。手順は [GMAIL_SETUP.md](GMAIL_SETUP.md) |
 | `RESEND_API_KEY` / `NOTIFICATION_FROM_EMAIL` / `NOTIFICATION_APP_URL` | メール通知を使う場合 | Resend の送信設定。未設定なら通知はアプリ内のみで、メールは送らない。**実送信は未検証（モックでのみ確認）** |
 | `NOTIFICATION_JOB_SECRET` | メール通知を使う場合 | 32文字以上。`POST /api/internal/notifications/send` を `Authorization: Bearer <値>` で定期実行する（未送信・再試行分の処理）。**定期実行の設定は未実施** |
+| `ANTHROPIC_API_KEY` / `RECEIPT_OCR_MODEL` / `INVOICE_OCR_DAILY_LIMIT` | AI読み取りを使う場合 | 領収書・請求書の読み取り。未設定なら手入力のみ。**サーバー側のみ**。詳細は [engineer-review-checklist.md](engineer-review-checklist.md) |
 | `NEXT_PUBLIC_APP_URL` | 不要 | 現在コードでは読んでいない |
 | `SEIQ_DEV_DIST` | 不要 | 開発用の出力先の切り替え（`next.config.ts`）。本番では設定しない |
 
@@ -207,6 +208,8 @@ AI が書いたコードなので、特に次を見てほしい（金額・権�
 - Codex と Claude Code が同じフォルダを同時に編集すると、片方の変更が上書きされるおそれがある。
 
 ## 9. 関連ドキュメント
+
+- **追加機能（提出・外部リンク・AI読み取り・月次表）の確認項目：[engineer-review-checklist.md](engineer-review-checklist.md)**
 
 | ファイル | 内容 |
 |---|---|
