@@ -24,10 +24,18 @@ export async function requireWorkspace(minimum: WorkspaceRole = "VIEWER") {
 
 /** For pages: send users who lack the role back to the dashboard instead of erroring. */
 export async function requireWorkspacePage(minimum: WorkspaceRole = "VIEWER") {
+  const user = await requireUser();
+  const ctx = await resolveWorkspace(prisma, user.id);
   try {
-    return await requireWorkspace(minimum);
+    assertRole(ctx, minimum);
   } catch (e) {
-    if (e instanceof PermissionError) redirect("/dashboard");
+    // 提出者は、ダッシュボードも見られないので、提出の画面へ送る。
+    if (e instanceof PermissionError)
+      redirect(ctx.role === "SUBMITTER" ? "/submit" : "/dashboard");
     throw e;
   }
+  return { user, ...ctx };
 }
+
+/** For pages used by submitters (contractors) and everyone above them. */
+export const requireSubmitterPage = () => requireWorkspacePage("SUBMITTER");

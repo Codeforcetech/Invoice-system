@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth/session";
 import { resolveWorkspace } from "@/lib/workspace/access";
+import { roleDenied } from "@/lib/auth/route-guard";
 import { recordAudit } from "@/lib/workspace/audit";
 import { prisma } from "@/lib/db/prisma";
 import { accountingReport, reportSchema } from "@/lib/accounting/reports";
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
   )
     return new Response("Unauthorized", { status: 401, headers });
   const ws = await resolveWorkspace(prisma, session.sub);
+  const denied = roleDenied(ws.role);
+  if (denied) return denied;
   const sp = new URL(request.url).searchParams;
   const parsed = reportSchema.safeParse(Object.fromEntries(sp));
   const format = sp.get("format");

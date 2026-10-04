@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth/session";
 import { resolveWorkspace } from "@/lib/workspace/access";
+import { roleDenied } from "@/lib/auth/route-guard";
 import { prisma } from "@/lib/db/prisma";
 import { dispositionName, downloadName } from "@/lib/evidence/download-name";
 export const runtime = "nodejs";
@@ -23,6 +24,8 @@ export async function GET(
   if (!/^[a-zA-Z0-9-]{1,100}$/.test(expenseId))
     return new Response(null, { status: 404, headers });
   const ws = await resolveWorkspace(prisma, session.sub);
+  const denied = roleDenied(ws.role);
+  if (denied) return denied;
   const attachment = await prisma.expenseAttachment.findFirst({
     where: { expenseId, expense: { userId: ws.ownerId } },
     select: {

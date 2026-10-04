@@ -1,3 +1,4 @@
+import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { getSettings } from "@/actions/settings-actions";
 import { SettingsForm } from "@/app/(app)/settings/_components/settings-form";
 import { Card, CardSection } from "@/components/ui/card";
@@ -6,6 +7,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 
 export default async function SettingsPage() {
+  await requireWorkspacePage("VIEWER");
   const settings = await getSettings();
 
   return (

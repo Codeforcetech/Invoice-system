@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth/session";
 import { resolveWorkspace } from "@/lib/workspace/access";
+import { roleDenied } from "@/lib/auth/route-guard";
 import { prisma } from "@/lib/db/prisma";
 import { renderInvoicePdf } from "@/lib/pdf/render-invoice";
 import { invoicePdfFilename, MAX_PDF_BYTES } from "@/lib/gmail/mime";
@@ -32,6 +33,8 @@ export async function GET(
   });
   if (!user) return error("ログインし直してください。", 401);
   const ws = await resolveWorkspace(prisma, user.id);
+  const denied = roleDenied(ws.role);
+  if (denied) return denied;
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, createdById: ws.ownerId },
     include: { company: true, items: { orderBy: { sortOrder: "asc" } } },

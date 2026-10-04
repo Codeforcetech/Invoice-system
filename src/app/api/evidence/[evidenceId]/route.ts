@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { resolveWorkspace } from "@/lib/workspace/access";
+import { roleDenied } from "@/lib/auth/route-guard";
 import { recordAudit } from "@/lib/workspace/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export async function GET(
   });
   if (!user) return new Response(null, { status: 401, headers });
   const ws = await resolveWorkspace(prisma, user.id);
+  const denied = roleDenied(ws.role);
+  if (denied) return denied;
   const file = await prisma.evidenceFile.findFirst({
     where: { id: evidenceId, ownerId: ws.ownerId },
     select: { data: true, filename: true, mimeType: true, counterparty: true },

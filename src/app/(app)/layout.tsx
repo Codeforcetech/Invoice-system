@@ -10,6 +10,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
   });
   const ws = await resolveWorkspace(prisma, user.id);
   const canEdit = hasRole(ws.role, "EDITOR");
+  const submitter = ws.role === "SUBMITTER";
   const memberRole = ws.isOwner ? undefined : roleLabel[ws.role];
   return (
     <div className="app-workspace min-h-screen bg-background text-slate-800">
@@ -21,15 +22,17 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
       </a>
       <AppSidebar
         email={user.email}
-        showAdmin={user.role === "ADMIN"}
+        showAdmin={user.role === "ADMIN" && !submitter}
         canEdit={canEdit}
+        submitter={submitter}
         memberRole={memberRole}
       />
       <div className="min-w-0 lg:pl-[232px]">
         <MobileAppHeader
           email={user.email}
-          showAdmin={user.role === "ADMIN"}
+          showAdmin={user.role === "ADMIN" && !submitter}
           canEdit={canEdit}
+          submitter={submitter}
           memberRole={memberRole}
           unreadNotifications={unreadNotifications}
         />

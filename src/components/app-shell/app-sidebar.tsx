@@ -72,22 +72,40 @@ export const navigation: {
   },
   { href: "/guide", label: "使い方ガイド", icon: "book", group: "サポート" },
 ];
+/** 提出者（業務委託）に見せるメニュー。会社のデータの画面は、一切出さない。 */
+export const submitterNavigation: typeof navigation = [
+  { href: "/submit", label: "書類を提出する", icon: "invoice", group: "提出" },
+  {
+    href: "/submit/profile",
+    label: "自分の情報",
+    icon: "settings",
+    group: "提出",
+  },
+  {
+    href: "/notifications",
+    label: "お知らせ",
+    icon: "mail",
+    group: "サポート",
+  },
+  { href: "/guide", label: "使い方ガイド", icon: "book", group: "サポート" },
+];
 export function SidebarContent(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
+  submitter?: boolean;
   memberRole?: string;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const entries = navigation.filter(
-    (n) => props.showAdmin || n.href !== "/admin/users",
-  );
+  const entries = props.submitter
+    ? submitterNavigation
+    : navigation.filter((n) => props.showAdmin || n.href !== "/admin/users");
   return (
     <div className="flex h-full flex-col px-5 pb-5 pt-8">
       <Link
-        href="/dashboard"
-        aria-label="SEIQ ダッシュボード"
+        href={props.submitter ? "/submit" : "/dashboard"}
+        aria-label={props.submitter ? "SEIQ 提出" : "SEIQ ダッシュボード"}
         onClick={props.onNavigate}
         className="px-2"
       >
@@ -173,6 +191,7 @@ export function AppSidebar(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
+  submitter?: boolean;
   memberRole?: string;
 }) {
   return (

@@ -4,17 +4,19 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { AppIcon } from "@/components/ui/app-icon";
-import { navigation, SidebarContent } from "./app-sidebar";
+import { navigation, submitterNavigation, SidebarContent } from "./app-sidebar";
 export function MobileAppHeader({
   email = "",
   showAdmin = false,
   canEdit = true,
+  submitter = false,
   memberRole,
   unreadNotifications = 0,
 }: {
   email?: string;
   showAdmin?: boolean;
   canEdit?: boolean;
+  submitter?: boolean;
   memberRole?: string;
   unreadNotifications?: number;
 }) {
@@ -32,7 +34,7 @@ export function MobileAppHeader({
       document.body.style.overflow = old;
     };
   }, [open]);
-  const current = navigation.find(
+  const current = (submitter ? submitterNavigation : navigation).find(
     (n) => pathname === n.href || pathname.startsWith(n.href + "/"),
   );
   return (
@@ -49,7 +51,7 @@ export function MobileAppHeader({
             <AppIcon name="menu" />
           </button>
           <Link
-            href="/dashboard"
+            href={submitter ? "/submit" : "/dashboard"}
             className="lg:hidden"
             aria-label="SEIQ ホーム"
           >
@@ -104,6 +106,7 @@ export function MobileAppHeader({
           email={email}
           showAdmin={showAdmin}
           canEdit={canEdit}
+          submitter={submitter}
           memberRole={memberRole}
           onNavigate={() => setOpen(false)}
         />

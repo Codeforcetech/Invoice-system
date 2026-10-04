@@ -2,11 +2,18 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-// Ordered from least to most privileged.
-export const WORKSPACE_ROLES = ["VIEWER", "EDITOR", "APPROVER", "ADMIN"] as const;
+// Ordered from least to most privileged. SUBMITTER (contractor) can reach nothing but their own submissions.
+export const WORKSPACE_ROLES = [
+  "SUBMITTER",
+  "VIEWER",
+  "EDITOR",
+  "APPROVER",
+  "ADMIN",
+] as const;
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
 export const roleLabel: Record<WorkspaceRole, string> = {
+  SUBMITTER: "提出者（業務委託）",
   VIEWER: "閲覧のみ",
   EDITOR: "入力可",
   APPROVER: "承認可",
@@ -14,10 +21,13 @@ export const roleLabel: Record<WorkspaceRole, string> = {
 };
 
 export const roleSummary: Record<WorkspaceRole, string> = {
+  SUBMITTER:
+    "自分の請求書と領収書を提出し、提出状況と自分の情報だけを見られます。会社の請求書・帳簿・他の人の提出は見えません。",
   VIEWER: "帳簿・請求書・レポートを見ることだけができます。",
   EDITOR: "請求書・仕訳・経費・明細取込を入力できます。",
   APPROVER: "入力に加えて、経費精算などの承認と、仕訳・入金の取消ができます。",
-  ADMIN: "すべての操作に加えて、勘定科目・固定資産・自社情報・メンバー・操作ログを管理できます。",
+  ADMIN:
+    "すべての操作に加えて、勘定科目・固定資産・自社情報・メンバー・操作ログを管理できます。",
 };
 
 export class PermissionError extends Error {
@@ -28,7 +38,10 @@ export class PermissionError extends Error {
 }
 
 export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
-  return typeof value === "string" && (WORKSPACE_ROLES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (WORKSPACE_ROLES as readonly string[]).includes(value)
+  );
 }
 
 export function hasRole(role: WorkspaceRole, minimum: WorkspaceRole) {
@@ -49,10 +62,18 @@ export type WorkspaceContext = {
  * the user works in their own workspace as its administrator. Deactivated members
  * never fall back to the workspace they were removed from.
  */
-export async function resolveWorkspace(db: Db, userId: string): Promise<WorkspaceContext> {
+export async function resolveWorkspace(
+  db: Db,
+  userId: string,
+): Promise<WorkspaceContext> {
   const member = await db.workspaceMember.findUnique({ where: { userId } });
   if (member?.active && isWorkspaceRole(member.role)) {
-    return { ownerId: member.ownerId, userId, role: member.role, isOwner: false };
+    return {
+      ownerId: member.ownerId,
+      userId,
+      role: member.role,
+      isOwner: false,
+    };
   }
   return { ownerId: userId, userId, role: "ADMIN", isOwner: true };
 }
