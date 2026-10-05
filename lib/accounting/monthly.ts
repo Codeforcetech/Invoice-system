@@ -46,6 +46,18 @@ export async function monthlyRows(
   toMonth: string,
   basis: Basis,
 ): Promise<MonthlyRow[]> {
+  return (await monthlyRowsWithMeta(db, ws, fromMonth, toMonth, basis)).rows;
+}
+
+/** monthlyRows に加えて、件数の上限に達して、一部が含まれていないかも返す。取引先が多い事業所の表で使う。 */
+export async function monthlyRowsWithMeta(
+  db: Db,
+  ws: { ownerId: string; userId: string },
+  fromMonth: string,
+  toMonth: string,
+  basis: Basis,
+  limit = 2000,
+): Promise<{ rows: MonthlyRow[]; truncated: boolean }> {
   const gte = monthRange(fromMonth).gte,
     lt = monthRange(toMonth).lt;
   const months: string[] = [];
@@ -76,7 +88,7 @@ export async function monthlyRows(
       company: { select: { name: true } },
     },
     orderBy: { receivedDate: "asc" },
-    take: 2000,
+    take: limit,
   });
   const expensesQ = db.expense.findMany({
     where:
@@ -92,7 +104,7 @@ export async function monthlyRows(
       costMonth: true,
       paidDate: true,
     },
-    take: 2000,
+    take: limit,
   });
   const claimsQ = db.expenseClaim.findMany({
     where: {
@@ -115,7 +127,7 @@ export async function monthlyRows(
       paidDate: true,
       applicant: { select: { name: true } },
     },
-    take: 2000,
+    take: limit,
   });
   const linesQ = db.journalLine.findMany({
     where: {
@@ -136,7 +148,7 @@ export async function monthlyRows(
       account: { select: { kind: true, name: true } },
       entry: { select: { id: true, date: true, memo: true } },
     },
-    take: 4000,
+    take: limit * 2,
   });
   const [invoices, expenses, claims, lines] = await Promise.all([
     invoicesQ,
@@ -144,6 +156,11 @@ export async function monthlyRows(
     claimsQ,
     linesQ,
   ]);
+  const truncated =
+    invoices.length >= limit ||
+    expenses.length >= limit ||
+    claims.length >= limit ||
+    lines.length >= limit * 2;
 
   // --- 売上（入金月） ---
   for (const i of invoices) {
@@ -231,9 +248,10 @@ export async function monthlyRows(
       href: `/accounting?view=money&from=${date}&to=${date}`,
     });
   }
-  return rows.sort((a, b) =>
+  rows.sort((a, b) =>
     a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : 1,
   );
+  return { rows, truncated };
 }
 
 export type MonthTotal = {

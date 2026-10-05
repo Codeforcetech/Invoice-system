@@ -37,11 +37,15 @@ export async function GET(request: Request) {
   const basis: Basis = sp.get("basis") === "incurred" ? "incurred" : "paid";
   const mode = sp.get("tax") === "net" ? "net" : "gross";
   try {
-    const [lines, companies] = await Promise.all([
+    const [{ lines }, companies] = await Promise.all([
       salesTableLines(prisma, ws, year, basis),
       companiesWithStores(prisma, ws.ownerId),
     ]);
-    const table = buildSalesTable(lines, companies, mode);
+    const table = buildSalesTable(lines, companies, {
+      mode,
+      showAll: true,
+      sort: "name",
+    });
     const kind = { SALES: "売上", COST: "費用", PROFIT: "差額" } as const;
     const body = csv([
       [
@@ -51,15 +55,22 @@ export async function GET(request: Request) {
         ...Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
         "合計",
       ],
-      ...table.blocks.flatMap((b) =>
-        b.rows.map((r) => [
+      ...table.blocks.flatMap((b) => [
+        ...b.stores.map((r) => [
           b.name,
           r.label,
           kind[r.kind],
           ...r.months,
           r.total,
         ]),
-      ),
+        ...b.summary.map((r) => [
+          b.name,
+          b.stores.length ? "（取引先の合計）" : "",
+          kind[r.kind],
+          ...r.months,
+          r.total,
+        ]),
+      ]),
       ...table.totals.map((r) => [
         "全体の合計",
         "",

@@ -73,34 +73,39 @@ describe("buildSalesTable", () => {
     line({ companyId: "c2", companyName: "取引先B", gross: 330, net: 300 }),
     line({ companyId: null, kind: "COST", gross: 77, net: 70 }),
   ];
-  const t = buildSalesTable(lines, companies, "gross");
+  const t = buildSalesTable(lines, companies, { mode: "gross", sort: "name" });
 
-  it("makes one block per company that has data or stores, and one for unassigned", () => {
+  it("makes one block per company that has data, with the unassigned block last", () => {
     expect(t.blocks.map((b) => b.name)).toEqual([
       "取引先A",
       "取引先B",
       "取引先の指定なし",
     ]);
+    expect(t.hiddenEmpty).toBe(1);
   });
-  it("shows sales and cost rows per active store, with subtotals", () => {
-    const a = t.blocks[0].rows;
-    expect(a.map((r) => `${r.label}:${r.kind}`)).toEqual([
+  it("shows data-less companies only when asked", () => {
+    const all = buildSalesTable(lines, companies, {
+      mode: "gross",
+      showAll: true,
+    });
+    expect(all.blocks.map((b) => b.name)).toContain("何もない取引先");
+  });
+  it("gives every company a sales and a cost summary row, and rows per store only when stores are used", () => {
+    const a = t.blocks[0];
+    expect(a.summary.map((r) => r.kind)).toEqual(["SALES", "COST"]);
+    expect(a.summary[0].total).toBe(1650);
+    expect(a.summary[1].total).toBe(220);
+    expect(a.stores.map((r) => `${r.label}:${r.kind}`)).toEqual([
       "店舗A:SALES",
       "店舗A:COST",
       "店舗B:SALES",
       "店舗B:COST",
-      "小計:SALES",
-      "小計:COST",
     ]);
-    expect(a[0].months[0]).toBe(1100);
-    expect(a[0].months[2]).toBe(550);
-    expect(a[0].total).toBe(1650);
-    expect(a[3].total).toBe(220);
-    expect(a[4].total).toBe(1650);
-  });
-  it("a company without stores gets just a sales row and a cost row", () => {
-    expect(t.blocks[1].rows).toHaveLength(2);
-    expect(t.blocks[1].rows[0].total).toBe(330);
+    expect(a.stores[0].months[0]).toBe(1100);
+    expect(a.stores[0].months[2]).toBe(550);
+    expect(a.stores[3].total).toBe(220);
+    expect(t.blocks[1].stores).toEqual([]);
+    expect(t.blocks[1].summary[0].total).toBe(330);
   });
   it("totals add up across everything", () => {
     const [sales, cost, profit] = t.totals;
@@ -109,21 +114,79 @@ describe("buildSalesTable", () => {
     expect(profit.total).toBe(1683);
   });
   it("can show the tax-excluded amounts", () => {
-    expect(buildSalesTable(lines, companies, "net").totals[0].total).toBe(1800);
+    expect(
+      buildSalesTable(lines, companies, { mode: "net" }).totals[0].total,
+    ).toBe(1800);
+  });
+  it("sorts by sales (largest first) or by name", () => {
+    const bySales = buildSalesTable(lines, companies, { mode: "gross" });
+    expect(bySales.blocks.map((b) => b.name)).toEqual([
+      "取引先A",
+      "取引先B",
+      "取引先の指定なし",
+    ]);
+    const swapped = buildSalesTable(
+      [
+        line({ companyId: "c2", companyName: "取引先B", gross: 99999, net: 1 }),
+        ...lines,
+      ],
+      companies,
+      { mode: "gross" },
+    );
+    expect(swapped.blocks[0].name).toBe("取引先B");
+  });
+  it("searches by name regardless of width, case and spaces, and keeps the overall totals", () => {
+    const r = buildSalesTable(lines, companies, {
+      mode: "gross",
+      query: " 取引先ｂ ",
+    });
+    expect(r.blocks.map((b) => b.name)).toEqual(["取引先B"]);
+    expect(r.totals[0].total).toBe(1980);
+    expect(r.shownTotals![0].total).toBe(330);
+    expect(t.shownTotals).toBeNull();
   });
   it("drill-down returns exactly the lines behind a cell", () => {
-    const cell = t.blocks[0].rows[0];
+    const cell = t.blocks[0].stores[0];
     const picked = filterLines(lines, { month: "2026-01", ...cell.scope });
     expect(picked.reduce((n, l) => n + l.gross, 0)).toBe(cell.months[0]);
     const year = filterLines(lines, { month: "", ...cell.scope });
     expect(year.reduce((n, l) => n + l.gross, 0)).toBe(cell.total);
-    const sub = t.blocks[0].rows[4];
+    const sum = t.blocks[0].summary[0];
     expect(
-      filterLines(lines, { month: "", ...sub.scope }).reduce(
+      filterLines(lines, { month: "", ...sum.scope }).reduce(
         (n, l) => n + l.gross,
         0,
       ),
-    ).toBe(sub.total);
+    ).toBe(sum.total);
+  });
+  it("stays fast and exact with hundreds of companies", () => {
+    const many = Array.from({ length: 500 }, (_, i) => ({
+      id: `m${i}`,
+      name: `取引先${i}`,
+      stores:
+        i % 10 === 0 ? [{ id: `ms${i}`, name: "本店", active: true }] : [],
+    }));
+    const big: SalesLine[] = [];
+    for (let i = 0; i < 500; i++)
+      for (let m = 1; m <= 12; m++)
+        big.push(
+          line({
+            companyId: `m${i}`,
+            companyName: `取引先${i}`,
+            storeId: i % 10 === 0 ? `ms${i}` : null,
+            month: `2026-${String(m).padStart(2, "0")}`,
+            gross: 1000 + i,
+            net: 900 + i,
+          }),
+        );
+    const t0 = performance.now();
+    const r = buildSalesTable(big, many, { mode: "gross" });
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(r.blocks).toHaveLength(500);
+    expect(r.blocks[0].name).toBe("取引先499"); // 売上の多い順
+    const expected = big.reduce((n, l) => n + l.gross, 0);
+    expect(r.totals[0].total).toBe(expected);
+    expect(r.blocks.reduce((n, b) => n + b.salesTotal, 0)).toBe(expected);
   });
 });
 
@@ -244,7 +307,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
     afterAll(cleanup);
 
     it("splits sales by item store and ties out to the invoice", async () => {
-      const lines = await salesTableLines(prisma, ws, "2026", "paid");
+      const { lines } = await salesTableLines(prisma, ws, "2026", "paid");
       const sales = lines.filter((l) => l.kind === "SALES");
       expect(sales.map((l) => [l.storeName, l.month, l.gross]).sort()).toEqual([
         ["店舗A", "2026-02", 110000],
@@ -253,7 +316,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       expect(sales.reduce((n, l) => n + l.net, 0)).toBe(300000);
     });
     it("puts costs under their company and store, or under unassigned", async () => {
-      const lines = await salesTableLines(prisma, ws, "2026", "paid");
+      const { lines } = await salesTableLines(prisma, ws, "2026", "paid");
       const costs = lines.filter((l) => l.kind === "COST");
       expect(costs.find((l) => l.content === "資材")).toMatchObject({
         companyId,
@@ -263,7 +326,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       expect(costs.find((l) => l.content === "雑費")?.companyId).toBeNull();
     });
     it("does not leak another workspace's data", async () => {
-      const lines = await salesTableLines(
+      const { lines } = await salesTableLines(
         prisma,
         { ownerId: other, userId: other },
         "2026",

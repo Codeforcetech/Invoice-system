@@ -39,7 +39,12 @@ export default async function SalesTableDetailPage({
   const company = get("company").slice(0, 60);
   const store = get("store").slice(0, 60);
 
-  const all = await salesTableLines(prisma, ws, year, basis);
+  const { lines: all, truncated } = await salesTableLines(
+    prisma,
+    ws,
+    year,
+    basis,
+  );
   const list = filterLines(all, { month, company, store, kind });
   const total = list.reduce((n, l) => n + l[mode], 0);
   const companyName =
@@ -72,6 +77,14 @@ export default async function SalesTableDetailPage({
         ← 売上管理表へ戻る
       </Link>
       <SectionHeader variant="page" title="明細" description={title} />
+      {truncated && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          件数が多いため、一部の明細が含まれていません。
+        </p>
+      )}
       <Card>
         <CardSection>
           <p className="text-xs text-slate-500">

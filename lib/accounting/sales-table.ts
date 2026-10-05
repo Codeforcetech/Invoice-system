@@ -1,6 +1,9 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { isTaxCategory, taxCategoryInfo } from "@/lib/tax/categories";
-import { monthlyRows, yearMonths, type Basis } from "./monthly";
+import { monthlyRowsWithMeta, yearMonths, type Basis } from "./monthly";
+
+/** 表で集計に使う明細の件数の上限（それぞれ1年あたり）。超えたら、画面に警告を出す。 */
+export const SALES_TABLE_LIMIT = 10000;
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -77,9 +80,16 @@ export async function salesTableLines(
   ws: { ownerId: string; userId: string },
   year: string,
   basis: Basis,
-): Promise<SalesLine[]> {
+): Promise<{ lines: SalesLine[]; truncated: boolean }> {
   const months = yearMonths(`${year}-01`);
-  const rows = await monthlyRows(db, ws, months[0], months[11], basis);
+  const { rows, truncated } = await monthlyRowsWithMeta(
+    db,
+    ws,
+    months[0],
+    months[11],
+    basis,
+    SALES_TABLE_LIMIT,
+  );
   const idsOf = (prefix: string) =>
     rows
       .filter((r) => r.key.startsWith(prefix))
@@ -170,7 +180,7 @@ export async function salesTableLines(
       net: r.net,
     });
   }
-  return lines;
+  return { lines, truncated };
 }
 
 export type TableRow = {
@@ -184,11 +194,40 @@ export type TableRow = {
   scope: { company: string; store: string; kind: "SALES" | "COST" | "" };
   subtotal?: boolean;
 };
-export type TableBlock = { id: string; name: string; rows: TableRow[] };
-export type SalesTable = { blocks: TableBlock[]; totals: TableRow[] };
+export type TableBlock = {
+  id: string;
+  name: string;
+  /** 取引先ぜんたいの売上・費用（店舗の合計）。常に表示する */
+  summary: TableRow[];
+  /** 店舗ごとの売上・費用。店舗を使わない取引先は空 */
+  stores: TableRow[];
+  salesTotal: number;
+  costTotal: number;
+  hasData: boolean;
+};
+export type SalesTable = {
+  /** 検索・並び順を反映した、取引先ごとのまとまり（ページ分けの前） */
+  blocks: TableBlock[];
+  /** 全体の合計（検索に関係なく、すべての取引先） */
+  totals: TableRow[];
+  /** 検索で絞ったときの合計（絞っていないときは null） */
+  shownTotals: TableRow[] | null;
+  /** データがないため、表に出していない取引先の数 */
+  hiddenEmpty: number;
+};
+export type BuildOptions = {
+  mode: "gross" | "net";
+  /** 取引先名の検索（全角半角・大文字小文字は区別しない） */
+  query?: string;
+  sort?: "sales" | "name";
+  /** データのない取引先も出す */
+  showAll?: boolean;
+};
 
 const zero = () => Array<number>(12).fill(0);
 const sumOf = (a: number[]) => a.reduce((n, v) => n + v, 0);
+const fold = (v: string) =>
+  v.normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase("ja-JP");
 
 export function buildSalesTable(
   lines: SalesLine[],
@@ -197,10 +236,11 @@ export function buildSalesTable(
     name: string;
     stores: { id: string; name: string; active: boolean }[];
   }[],
-  mode: "gross" | "net",
+  opts: BuildOptions,
 ): SalesTable {
+  const { mode } = opts;
   type Acc = { sales: number[]; cost: number[]; used: boolean };
-  const acc = new Map<string, Map<string, Acc>>(); // companyKey → storeKey → 月ごとの数字
+  const acc = new Map<string, Map<string, Acc>>(); // 取引先 → 店舗 → 月ごとの数字
   const get = (c: string, s: string) => {
     const m = acc.get(c) ?? new Map<string, Acc>();
     acc.set(c, m);
@@ -230,61 +270,88 @@ export function buildSalesTable(
     subtotal,
   });
 
-  const blocks: TableBlock[] = [];
   const order = [
     ...companies.map((c) => ({ id: c.id, name: c.name, stores: c.stores })),
     { id: UNASSIGNED, name: UNASSIGNED_NAME, stores: [] },
   ];
+  const all: TableBlock[] = [];
   for (const c of order) {
     const used = acc.get(c.id);
-    const active = c.stores.filter((s) => s.active);
-    if (!used && !active.length) continue;
-    // 店舗の並び: 登録順（使わない店舗は、数字があるときだけ）→ 店舗なし
     const storeKeys = c.stores
       .filter((s) => s.active || used?.get(s.id)?.used)
       .map((s) => ({ id: s.id, name: s.name }));
     const hasNoStore = used?.get(UNASSIGNED)?.used;
-    const rows: TableRow[] = [];
     const sumSales = zero(),
       sumCost = zero();
-    const push = (id: string, name: string) => {
-      const a = used?.get(id) ?? { sales: zero(), cost: zero(), used: false };
-      rows.push(mk(name, "SALES", a.sales, c.id, id));
-      rows.push(mk(name, "COST", a.cost, c.id, id));
+    const stores: TableRow[] = [];
+    if (storeKeys.length) {
+      const push = (id: string, name: string) => {
+        const a = used?.get(id) ?? { sales: zero(), cost: zero(), used: false };
+        stores.push(mk(name, "SALES", a.sales, c.id, id));
+        stores.push(mk(name, "COST", a.cost, c.id, id));
+      };
+      for (const s of storeKeys) push(s.id, s.name);
+      if (hasNoStore) push(UNASSIGNED, NO_STORE_NAME);
+    }
+    for (const a of used?.values() ?? []) {
       a.sales.forEach((v, i) => (sumSales[i] += v));
       a.cost.forEach((v, i) => (sumCost[i] += v));
-    };
-    for (const s of storeKeys) push(s.id, s.name);
-    if (hasNoStore || !storeKeys.length)
-      push(UNASSIGNED, storeKeys.length ? NO_STORE_NAME : "");
-    if (rows.length > 2) {
-      rows.push(mk("小計", "SALES", sumSales, c.id, "", true));
-      rows.push(mk("小計", "COST", sumCost, c.id, "", true));
     }
-    blocks.push({ id: c.id, name: c.name, rows });
+    all.push({
+      id: c.id,
+      name: c.name,
+      summary: [
+        mk("", "SALES", sumSales, c.id, "", stores.length > 0),
+        mk("", "COST", sumCost, c.id, "", stores.length > 0),
+      ],
+      stores,
+      salesTotal: sumOf(sumSales),
+      costTotal: sumOf(sumCost),
+      hasData: !!used && [...used.values()].some((a) => a.used),
+    });
   }
-  const allSales = zero(),
-    allCost = zero();
-  for (const m of acc.values())
-    for (const a of m.values()) {
-      a.sales.forEach((v, i) => (allSales[i] += v));
-      a.cost.forEach((v, i) => (allCost[i] += v));
+
+  const sums = (blocks: TableBlock[]) => {
+    const s = zero(),
+      c = zero();
+    for (const b of blocks) {
+      b.summary[0].months.forEach((v, i) => (s[i] += v));
+      b.summary[1].months.forEach((v, i) => (c[i] += v));
     }
-  const profit = allSales.map((v, i) => v - allCost[i]);
-  return {
-    blocks,
-    totals: [
-      mk("全体の合計", "SALES", allSales, "", "", true),
-      mk("全体の合計", "COST", allCost, "", "", true),
+    const profit = s.map((v, i) => v - c[i]);
+    return [
+      mk("全体の合計", "SALES", s, "", "", true),
+      mk("全体の合計", "COST", c, "", "", true),
       {
         label: "全体の合計",
-        kind: "PROFIT",
+        kind: "PROFIT" as const,
         months: profit,
         total: sumOf(profit),
-        scope: { company: "", store: "", kind: "" },
+        scope: { company: "", store: "", kind: "" as const },
         subtotal: true,
       },
-    ],
+    ];
+  };
+
+  const q = fold(opts.query ?? "");
+  const visible = all.filter((b) => opts.showAll || b.hasData);
+  const matched = q ? visible.filter((b) => fold(b.name).includes(q)) : visible;
+  const sorted = [...matched].sort((a, b) => {
+    // 「取引先の指定なし」は、いつも最後
+    if ((a.id === UNASSIGNED) !== (b.id === UNASSIGNED))
+      return a.id === UNASSIGNED ? 1 : -1;
+    if (opts.sort === "name") return a.name.localeCompare(b.name, "ja");
+    return (
+      b.salesTotal - a.salesTotal ||
+      b.costTotal - a.costTotal ||
+      a.name.localeCompare(b.name, "ja")
+    );
+  });
+  return {
+    blocks: sorted,
+    totals: sums(all),
+    shownTotals: q ? sums(sorted) : null,
+    hiddenEmpty: all.length - all.filter((b) => b.hasData).length,
   };
 }
 

@@ -2,21 +2,22 @@ import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { requireWorkspacePage } from "@/lib/auth/require-workspace";
 import { japanToday } from "@/lib/expenses/model";
-import { yen } from "@/lib/accounting/model";
 import type { Basis } from "@/lib/accounting/monthly";
 import {
   buildSalesTable,
   salesTableLines,
-  type TableRow,
+  SALES_TABLE_LIMIT,
 } from "@/lib/accounting/sales-table";
 import { companiesWithStores } from "@/lib/stores";
 import { PageShell } from "@/components/ui/page-shell";
 import { SectionHeader } from "@/components/ui/section-header";
 import { AppButtonLink, appButtonVariants } from "@/components/ui/app-button";
 import { Card, CardSection } from "@/components/ui/card";
-import { selectClass } from "@/lib/ui/form-classes";
+import { inputClass, selectClass } from "@/lib/ui/form-classes";
+import { SalesTableView } from "@/components/accounting/sales-table-view";
 
-const money = (n: number) => (n < 0 ? `-${yen(-n)}` : yen(n));
+/** 1ページに出す取引先の数。取引先が多い事業所でも、表が長くなりすぎないようにする。 */
+const PAGE_SIZE = 30;
 
 export default async function SalesTablePage({
   searchParams,
@@ -27,72 +28,43 @@ export default async function SalesTablePage({
   const sp = await searchParams;
   const get = (k: string) =>
     typeof sp[k] === "string" ? (sp[k] as string) : "";
-  const thisYear = japanToday().slice(0, 4);
-  const year = /^20\d{2}$/.test(get("year")) ? get("year") : thisYear;
+  const year = /^20\d{2}$/.test(get("year"))
+    ? get("year")
+    : japanToday().slice(0, 4);
   const basis: Basis = get("basis") === "incurred" ? "incurred" : "paid";
   const mode = get("tax") === "net" ? "net" : "gross";
+  const query = get("q").trim().slice(0, 60);
+  const sort = get("sort") === "name" ? "name" : "sales";
+  const showAll = get("all") === "1";
   const label = mode === "gross" ? "税込" : "税抜";
-  const [lines, companies] = await Promise.all([
+  const [{ lines, truncated }, companies] = await Promise.all([
     salesTableLines(prisma, ws, year, basis),
     companiesWithStores(prisma, ws.ownerId),
   ]);
-  const table = buildSalesTable(lines, companies, mode);
-  const q = (over: Record<string, string> = {}) =>
-    new URLSearchParams({ year, basis, tax: mode, ...over }).toString();
-  const detail = (row: TableRow, month: string) =>
-    `/accounting/sales-table/detail?${q({
-      month,
-      company: row.scope.company,
-      store: row.scope.store,
-      kind: row.scope.kind,
-    })}`;
-  const kindLabel = (k: TableRow["kind"]) =>
-    k === "SALES" ? "売上" : k === "COST" ? "費用" : "差額";
-  const tone = (k: TableRow["kind"]) =>
-    k === "SALES" ? "text-emerald-700" : k === "COST" ? "text-rose-700" : "";
-  const cell = (row: TableRow, value: number, month: string) =>
-    value === 0 ? (
-      <span className="text-slate-300">0</span>
-    ) : row.kind === "PROFIT" ? (
-      <span>{money(value)}</span>
-    ) : (
-      <Link
-        href={detail(row, month)}
-        className="text-sky-700 underline-offset-2 hover:underline"
-        title="明細を見る"
-      >
-        {money(value)}
-      </Link>
-    );
-  const tr = (row: TableRow, key: string, first?: string) => (
-    <tr
-      key={key}
-      className={`border-t border-slate-100 ${row.subtotal ? "bg-slate-50 font-semibold" : ""}`}
-    >
-      <th
-        scope="row"
-        className="sticky left-0 z-10 whitespace-nowrap bg-inherit px-3 py-2 text-left font-normal"
-      >
-        {first ?? row.label}
-      </th>
-      <td className={`px-3 py-2 ${tone(row.kind)}`}>{kindLabel(row.kind)}</td>
-      {row.months.map((v, i) => (
-        <td key={i} className="px-3 py-2 text-right tabular-nums">
-          {cell(row, v, `${year}-${String(i + 1).padStart(2, "0")}`)}
-        </td>
-      ))}
-      <td className="px-3 py-2 text-right font-semibold tabular-nums">
-        {cell(row, row.total, "")}
-      </td>
-    </tr>
-  );
+  const table = buildSalesTable(lines, companies, {
+    mode,
+    query,
+    sort,
+    showAll,
+  });
+  const pages = Math.max(1, Math.ceil(table.blocks.length / PAGE_SIZE));
+  const page = Math.min(pages, Math.max(1, Number(get("page")) || 1));
+  const shown = table.blocks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const q = (over: Record<string, string> = {}) => {
+    const base: Record<string, string> = { year, basis, tax: mode, sort };
+    if (query) base.q = query;
+    if (showAll) base.all = "1";
+    return new URLSearchParams({ ...base, ...over }).toString();
+  };
+  const link = (over: Record<string, string>) =>
+    `/accounting/sales-table?${q(over)}`;
 
   return (
     <PageShell maxWidth="full">
       <SectionHeader
         variant="page"
         title="売上管理表"
-        description="取引先・店舗ごとの、月別の売上と費用です。数字を押すと、その明細が開きます。"
+        description="取引先ごとの、月別の売上と費用です。数字を押すと、その明細が開きます。"
         action={
           <AppButtonLink href="/accounting/monthly" variant="secondary">
             月ごとの売上と費用
@@ -110,8 +82,30 @@ export default async function SalesTablePage({
                 min={2000}
                 max={2099}
                 defaultValue={year}
-                className={`mt-1 w-28 ${selectClass}`}
+                className={`mt-1 w-28 ${inputClass}`}
               />
+            </label>
+            <label className="text-sm">
+              取引先を探す
+              <input
+                name="q"
+                type="search"
+                defaultValue={query}
+                maxLength={60}
+                placeholder="取引先の名前"
+                className={`mt-1 w-56 ${inputClass}`}
+              />
+            </label>
+            <label className="text-sm">
+              並び順
+              <select
+                name="sort"
+                defaultValue={sort}
+                className={`mt-1 ${selectClass}`}
+              >
+                <option value="sales">売上の多い順</option>
+                <option value="name">名前順</option>
+              </select>
             </label>
             <label className="text-sm">
               費用を数える月
@@ -135,82 +129,96 @@ export default async function SalesTablePage({
                 <option value="net">税抜（参考値）</option>
               </select>
             </label>
+            <label className="flex items-center gap-2 pb-2 text-sm">
+              <input
+                type="checkbox"
+                name="all"
+                value="1"
+                defaultChecked={showAll}
+              />
+              データのない取引先も出す
+            </label>
             <button className={`rounded-xl ${appButtonVariants.primary}`}>
               表示する
             </button>
-            <div className="flex flex-wrap gap-2">
-              <AppButtonLink
-                href={`/accounting/sales-table?${q({ year: String(Number(year) - 1) })}`}
-                variant="secondary"
-              >
-                ← {Number(year) - 1}年
-              </AppButtonLink>
-              <AppButtonLink
-                href={`/accounting/sales-table?${q({ year: String(Number(year) + 1) })}`}
-                variant="secondary"
-              >
-                {Number(year) + 1}年 →
-              </AppButtonLink>
-              <a
-                href={`/api/accounting/sales-table-csv?${q()}`}
-                className={`rounded-xl ${appButtonVariants.secondary}`}
-              >
-                CSVで出力
-              </a>
-            </div>
           </form>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <AppButtonLink
+              href={link({ year: String(Number(year) - 1), page: "1" })}
+              variant="secondary"
+            >
+              ← {Number(year) - 1}年
+            </AppButtonLink>
+            <AppButtonLink
+              href={link({ year: String(Number(year) + 1), page: "1" })}
+              variant="secondary"
+            >
+              {Number(year) + 1}年 →
+            </AppButtonLink>
+            <a
+              href={`/api/accounting/sales-table-csv?${q()}`}
+              className={`rounded-xl ${appButtonVariants.secondary}`}
+            >
+              CSVで出力（全取引先）
+            </a>
+          </div>
         </CardSection>
       </Card>
 
+      {truncated && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          件数が多いため、一部の明細が含まれていません（上限：請求書・支払いなど、それぞれ年間
+          {SALES_TABLE_LIMIT.toLocaleString("ja-JP")}
+          件）。数字が足りない可能性があります。
+        </p>
+      )}
       <p className="text-xs leading-6 text-slate-500">
         金額は{label}
-        ・円。売上は「入金された月」で数えます（入金日が記録された請求書）。売上の店舗は請求書の明細で、費用の取引先・店舗は支払いの登録で選びます。取引先の指定がないものは、「取引先の指定なし」にまとめて出ます。
+        ・円。売上は「入金された月」で数えます。店舗は、請求書の明細と支払いの登録で選びます。取引先の指定がないものは、「取引先の指定なし」にまとめて出ます。{" "}
+        {table.blocks.length}社を表示
+        {!showAll && table.hiddenEmpty > 0
+          ? `（データのない${table.hiddenEmpty}社は、出していません）`
+          : ""}
+        {query ? `（「${query}」で絞り込み中）` : ""}
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-slate-50 text-xs">
-            <tr>
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left">
-                取引先／店舗
-              </th>
-              <th className="px-3 py-2 text-left">区分</th>
-              {Array.from({ length: 12 }, (_, i) => (
-                <th key={i} className="px-3 py-2 text-right">
-                  {i + 1}月
-                </th>
-              ))}
-              <th className="px-3 py-2 text-right">合計</th>
-            </tr>
-          </thead>
-          {table.blocks.map((b) => (
-            <tbody key={b.id} className="border-t-2 border-slate-200">
-              <tr className="bg-sky-50/60">
-                <th
-                  colSpan={15}
-                  scope="colgroup"
-                  className="sticky left-0 px-3 py-2 text-left font-semibold"
-                >
-                  {b.name}
-                </th>
-              </tr>
-              {b.rows.map((r, i) => tr(r, `${b.id}-${i}`))}
-            </tbody>
-          ))}
-          <tbody className="border-t-2 border-slate-300">
-            {table.totals.map((r, i) => tr(r, `t-${i}`))}
-          </tbody>
-          {table.blocks.length === 0 && (
-            <tbody>
-              <tr>
-                <td colSpan={15} className="p-8 text-center text-slate-500">
-                  {year}年の売上・費用は、まだありません。
-                </td>
-              </tr>
-            </tbody>
+      <SalesTableView
+        blocks={shown}
+        totals={table.totals}
+        shownTotals={table.shownTotals}
+        year={year}
+        params={{ year, basis, tax: mode }}
+      />
+
+      {pages > 1 && (
+        <nav
+          aria-label="ページ送り"
+          className="flex flex-wrap items-center gap-2 text-sm"
+        >
+          <span className="text-slate-500">
+            {page} / {pages} ページ（{PAGE_SIZE}社ずつ）
+          </span>
+          {page > 1 && (
+            <Link
+              href={link({ page: String(page - 1) })}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-50"
+            >
+              ← 前の{PAGE_SIZE}社
+            </Link>
           )}
-        </table>
-      </div>
+          {page < pages && (
+            <Link
+              href={link({ page: String(page + 1) })}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-50"
+            >
+              次の{PAGE_SIZE}社 →
+            </Link>
+          )}
+        </nav>
+      )}
     </PageShell>
   );
 }
