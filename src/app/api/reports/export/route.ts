@@ -28,6 +28,12 @@ export async function GET(request: Request) {
   )
     return new Response("Unauthorized", { status: 401, headers });
   const ws = await resolveWorkspace(prisma, session.sub);
+  // 経営レポートは、管理者だけ（提出者・ほかのメンバーには見せない）。
+  if (!hasRole(ws.role, "ADMIN"))
+    return new Response("この操作には管理者の権限が必要です。", {
+      status: 403,
+      headers,
+    });
   const sp = new URL(request.url).searchParams,
     format = sp.get("format"),
     parsed = filterSchema.safeParse(Object.fromEntries(sp));
@@ -39,11 +45,6 @@ export async function GET(request: Request) {
   )
     return new Response("出力形式と期間を確認してください。", {
       status: 400,
-      headers,
-    });
-  if (format === "transfer" && !hasRole(ws.role, "APPROVER"))
-    return new Response("振込データの出力には「承認可」以上の権限が必要です。", {
-      status: 403,
       headers,
     });
   if (active >= 2)

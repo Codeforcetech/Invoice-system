@@ -37,10 +37,13 @@ export function DashboardView({
   data,
   reports,
   canEdit = true,
+  finance = true,
 }: {
   data: DashboardData;
   reports?: import("react").ReactNode;
   canEdit?: boolean;
+  /** 売上・支払い・経営レポートを出すか（管理者だけ） */
+  finance?: boolean;
 }) {
   const money = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
   const setup = [
@@ -85,65 +88,69 @@ export function DashboardView({
           ) : undefined
         }
       />
-      <SalesOverview
-        filters={data.filters}
-        sales={data.sales}
-        companies={data.companies}
-      />
-      {reports}
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
-        aria-labelledby="dashboard-expenses"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="dashboard-expenses" className="font-semibold">
-            支払いの確認{" "}
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              {data.costs.month}
-            </span>
-          </h2>
-          <Link href="/expenses" className="py-2 text-sm text-sky-700">
-            支払管理を開く →
-          </Link>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
-          <div>
-            <p className="text-xs text-slate-500">今月のコスト・税込</p>
-            <p className="mt-2 text-xl font-semibold">
-              ¥{money(data.costs.total)}
-            </p>
-            <p className="mt-2 text-xs text-slate-500">費用の対象月で集計</p>
+      {finance && (
+        <SalesOverview
+          filters={data.filters}
+          sales={data.sales}
+          companies={data.companies}
+        />
+      )}
+      {finance && reports}
+      {finance && (
+        <section
+          className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+          aria-labelledby="dashboard-expenses"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="dashboard-expenses" className="font-semibold">
+              支払いの確認{" "}
+              <span className="ml-2 text-xs font-normal text-slate-500">
+                {data.costs.month}
+              </span>
+            </h2>
+            <Link href="/expenses" className="py-2 text-sm text-sky-700">
+              支払管理を開く →
+            </Link>
           </div>
-          <div>
-            <p className="text-xs text-slate-500">今月の支払実績</p>
-            <p className="mt-2 text-xl font-semibold">
-              ¥{money(data.costs.paid)}
-            </p>
-            <p className="mt-2 text-xs text-slate-500">実際の支払日で集計</p>
+          <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
+            <div>
+              <p className="text-xs text-slate-500">今月のコスト・税込</p>
+              <p className="mt-2 text-xl font-semibold">
+                ¥{money(data.costs.total)}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">費用の対象月で集計</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">今月の支払実績</p>
+              <p className="mt-2 text-xl font-semibold">
+                ¥{money(data.costs.paid)}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">実際の支払日で集計</p>
+            </div>
+            <Link
+              href="/expenses?status=OVERDUE"
+              className="rounded-xl bg-rose-50 p-3 text-rose-900"
+            >
+              <p className="text-xs">期限超過・全期間</p>
+              <p className="mt-2 font-semibold">
+                {data.costs.overdueCount}件を確認 →
+              </p>
+            </Link>
+            <Link
+              href="/expenses?status=SOON"
+              className="rounded-xl bg-amber-50 p-3 text-amber-900"
+            >
+              <p className="text-xs">今日から7日以内</p>
+              <p className="mt-2 font-semibold">
+                {data.costs.dueSoonCount}件を確認 →
+              </p>
+            </Link>
           </div>
-          <Link
-            href="/expenses?status=OVERDUE"
-            className="rounded-xl bg-rose-50 p-3 text-rose-900"
-          >
-            <p className="text-xs">期限超過・全期間</p>
-            <p className="mt-2 font-semibold">
-              {data.costs.overdueCount}件を確認 →
-            </p>
-          </Link>
-          <Link
-            href="/expenses?status=SOON"
-            className="rounded-xl bg-amber-50 p-3 text-amber-900"
-          >
-            <p className="text-xs">今日から7日以内</p>
-            <p className="mt-2 font-semibold">
-              {data.costs.dueSoonCount}件を確認 →
-            </p>
-          </Link>
-        </div>
-        <p className="mt-4 text-xs leading-5 text-slate-500">
-          支払いの金額は税込です。税抜請求額との差額は利益や手元資金を示すものではありません。
-        </p>
-      </section>
+          <p className="mt-4 text-xs leading-5 text-slate-500">
+            支払いの金額は税込です。税抜請求額との差額は利益や手元資金を示すものではありません。
+          </p>
+        </section>
+      )}
       <section
         aria-label="次にすること"
         className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-5"

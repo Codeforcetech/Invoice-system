@@ -30,7 +30,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
         email={user.email}
         showAdmin={user.role === "ADMIN" && !submitter}
         canEdit={canEdit}
-        approver={hasRole(ws.role, "APPROVER")}
+        finance={hasRole(ws.role, "ADMIN")}
         submitter={submitter}
         claims={claimMemberships > 0}
         memberRole={memberRole}
@@ -40,7 +40,7 @@ export default async function AppLayout(props: { children: React.ReactNode }) {
           email={user.email}
           showAdmin={user.role === "ADMIN" && !submitter}
           canEdit={canEdit}
-          approver={hasRole(ws.role, "APPROVER")}
+          finance={hasRole(ws.role, "ADMIN")}
           submitter={submitter}
           claims={claimMemberships > 0}
           memberRole={memberRole}

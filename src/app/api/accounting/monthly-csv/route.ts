@@ -12,7 +12,7 @@ const headers = {
   "X-Content-Type-Options": "nosniff",
 };
 
-/** 月ごとの売上・費用の表を、CSV（スプレッドシート用）で出力する（承認者以上）。 */
+/** 月ごとの売上・費用の表を、CSV（スプレッドシート用）で出力する（管理者のみ）。 */
 export async function GET(request: Request) {
   const session = await getSession();
   if (
@@ -24,8 +24,8 @@ export async function GET(request: Request) {
   )
     return new Response("Unauthorized", { status: 401, headers });
   const ws = await resolveWorkspace(prisma, session.sub);
-  if (!hasRole(ws.role, "APPROVER"))
-    return new Response("この操作には承認者以上の権限が必要です。", {
+  if (!hasRole(ws.role, "ADMIN"))
+    return new Response("この操作には管理者の権限が必要です。", {
       status: 403,
       headers,
     });

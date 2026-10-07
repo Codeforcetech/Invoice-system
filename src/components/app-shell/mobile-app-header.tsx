@@ -14,7 +14,7 @@ export function MobileAppHeader({
   email = "",
   showAdmin = false,
   canEdit = true,
-  approver = true,
+  finance = true,
   submitter = false,
   claims = false,
   memberRole,
@@ -23,7 +23,7 @@ export function MobileAppHeader({
   email?: string;
   showAdmin?: boolean;
   canEdit?: boolean;
-  approver?: boolean;
+  finance?: boolean;
   submitter?: boolean;
   claims?: boolean;
   memberRole?: string;
@@ -116,7 +116,7 @@ export function MobileAppHeader({
           email={email}
           showAdmin={showAdmin}
           canEdit={canEdit}
-          approver={approver}
+          finance={finance}
           submitter={submitter}
           claims={claims}
           memberRole={memberRole}

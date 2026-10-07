@@ -186,9 +186,11 @@ export default async function AccountingPage({
             >
               お金の出入り
             </AppButtonLink>
-            <AppButtonLink href="/reports" variant="secondary">
-              経営レポート
-            </AppButtonLink>
+            {hasRole(ws.role, "ADMIN") && (
+              <AppButtonLink href="/reports" variant="secondary">
+                経営レポート
+              </AppButtonLink>
+            )}
             <AppButtonLink href="/accounting/statements" variant="secondary">
               銀行・カード明細の取込
             </AppButtonLink>
@@ -198,12 +200,12 @@ export default async function AccountingPage({
             <AppButtonLink href="/accounting/assets" variant="secondary">
               固定資産
             </AppButtonLink>
-            {hasRole(ws.role, "APPROVER") && (
+            {hasRole(ws.role, "ADMIN") && (
               <AppButtonLink href="/accounting/monthly" variant="secondary">
                 月ごとの売上と費用
               </AppButtonLink>
             )}
-            {hasRole(ws.role, "APPROVER") && (
+            {hasRole(ws.role, "ADMIN") && (
               <AppButtonLink href="/accounting/sales-table" variant="secondary">
                 売上管理表
               </AppButtonLink>

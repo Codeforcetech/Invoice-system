@@ -112,8 +112,8 @@ export function SidebarContent(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
-  /** 承認者以上（売上管理表を出す） */
-  approver?: boolean;
+  /** 管理者（売上管理表を出す） */
+  finance?: boolean;
   submitter?: boolean;
   /** 提出者のうち、経費精算の申請メンバーでもある人 */
   claims?: boolean;
@@ -132,7 +132,7 @@ export function SidebarContent(props: {
     : navigation.filter(
         (n) =>
           (props.showAdmin || n.href !== "/admin/users") &&
-          (props.approver !== false || n.href !== "/accounting/sales-table"),
+          (props.finance !== false || n.href !== "/accounting/sales-table"),
       );
   const here = currentEntry(pathname, entries);
   return (
@@ -224,7 +224,7 @@ export function AppSidebar(props: {
   email: string;
   showAdmin: boolean;
   canEdit?: boolean;
-  approver?: boolean;
+  finance?: boolean;
   submitter?: boolean;
   claims?: boolean;
   memberRole?: string;

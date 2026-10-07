@@ -17,6 +17,8 @@ export default async function DashboardPage(props: {
 }) {
   const ws = await requireWorkspacePage("VIEWER");
   const filters = resolveSalesFilters(await props.searchParams);
+  // 売上・支払い・経営レポートは、管理者だけに見せる。
+  const finance = hasRole(ws.role, "ADMIN");
   const owner = { createdById: ws.ownerId, mergedIntoId: null };
   const [
     companies,
@@ -74,7 +76,7 @@ export default async function DashboardPage(props: {
       },
     }),
   ]);
-  const expenses = await listExpenses();
+  const expenses = finance ? await listExpenses() : [];
   const expenseTotals = expenseSummary(
     expenses,
     filters.current,
@@ -84,12 +86,15 @@ export default async function DashboardPage(props: {
   return (
     <DashboardView
       canEdit={hasRole(ws.role, "EDITOR")}
+      finance={finance}
       reports={
-        <DashboardReports
-          userId={ws.ownerId}
-          from={filters.from}
-          to={filters.to}
-        />
+        finance ? (
+          <DashboardReports
+            userId={ws.ownerId}
+            from={filters.from}
+            to={filters.to}
+          />
+        ) : undefined
       }
       data={{
         name: ws.user.name,
@@ -103,7 +108,7 @@ export default async function DashboardPage(props: {
         companyCount: companies.length,
         companies,
         filters,
-        sales: summarizeSales(groups, companies, filters),
+        sales: summarizeSales(finance ? groups : [], companies, filters),
         confirmedCount,
         invoiceCount,
         draftCount,

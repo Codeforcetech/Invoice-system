@@ -24,7 +24,7 @@ export default async function SalesTablePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const ws = await requireWorkspacePage("APPROVER");
+  const ws = await requireWorkspacePage("ADMIN");
   const sp = await searchParams;
   const get = (k: string) =>
     typeof sp[k] === "string" ? (sp[k] as string) : "";

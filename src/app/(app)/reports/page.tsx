@@ -15,7 +15,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const ws = await requireWorkspacePage("VIEWER"),
+  const ws = await requireWorkspacePage("ADMIN"),
     sp = await searchParams;
   const str = (key: string) =>
     typeof sp[key] === "string" ? (sp[key] as string) : "";
