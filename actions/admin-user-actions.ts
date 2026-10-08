@@ -73,51 +73,70 @@ export type WorkspaceUserRow = {
   active: boolean;
   createdAt: Date;
   isSelf: boolean;
+  /** this: この事業所のユーザー（権限を変えられる）／other: ほかの事業所のユーザー（見るだけ） */
+  scope: "this" | "other";
+  /** ほかの事業所のユーザーの、その事業所での立場（例：「管理者（自分の事業所）」） */
+  otherRole?: string;
 };
 
-/** この事業所のユーザー（所有者とメンバー）。メール・氏名で絞り込める。 */
+/**
+ * システム全体のユーザー一覧。この事業所のユーザー（所有者とメンバー）を先に出し、権限を変えられる。
+ * ほかの事業所のユーザーは、見るだけ（その人のデータや権限は、この画面からは変えない）。
+ */
 export async function listWorkspaceUsers(
   params: { q?: string } = {},
 ): Promise<WorkspaceUserRow[]> {
   const { admin, ws } = await adminContext();
   const q = params.q?.trim().toLowerCase();
-  const [owner, members] = await Promise.all([
-    prisma.user.findUniqueOrThrow({
-      where: { id: ws.ownerId },
+  const [users, memberships] = await Promise.all([
+    prisma.user.findMany({
       select: { id: true, name: true, email: true, createdAt: true },
-    }),
-    prisma.workspaceMember.findMany({
-      where: { ownerId: ws.ownerId },
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, createdAt: true },
-        },
-      },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.workspaceMember.findMany({
+      select: { userId: true, ownerId: true, role: true, active: true },
+    }),
   ]);
-  const rows: WorkspaceUserRow[] = [
-    {
-      userId: owner.id,
-      name: owner.name,
-      email: owner.email,
-      role: "OWNER",
-      active: true,
-      createdAt: owner.createdAt,
-      isSelf: owner.id === admin.id,
-    },
-    ...members
-      .filter((m) => isWorkspaceRole(m.role))
-      .map((m) => ({
-        userId: m.user.id,
-        name: m.user.name,
-        email: m.user.email,
+  const member = new Map(memberships.map((m) => [m.userId, m]));
+  const rows: WorkspaceUserRow[] = users.map((u) => {
+    const base = {
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      createdAt: u.createdAt,
+      isSelf: u.id === admin.id,
+    };
+    if (u.id === ws.ownerId)
+      return {
+        ...base,
+        role: "OWNER" as const,
+        active: true,
+        scope: "this" as const,
+      };
+    const m = member.get(u.id);
+    if (m && m.ownerId === ws.ownerId && isWorkspaceRole(m.role))
+      return {
+        ...base,
         role: m.role as WorkspaceRole,
         active: m.active,
-        createdAt: m.user.createdAt,
-        isSelf: m.user.id === admin.id,
-      })),
-  ];
+        scope: "this" as const,
+      };
+    const label =
+      m && m.active && isWorkspaceRole(m.role)
+        ? `${roleLabel[m.role as WorkspaceRole]}（別の事業所）`
+        : "管理者（自分の事業所）";
+    return {
+      ...base,
+      role: "OWNER" as const,
+      active: true,
+      scope: "other" as const,
+      otherRole: label,
+    };
+  });
+  // この事業所の人を先に（所有者→メンバーの順）、そのあとにほかの事業所の人。
+  const rank = (r: WorkspaceUserRow) =>
+    r.scope === "other" ? 2 : r.role === "OWNER" ? 0 : 1;
+  rows.sort((a, b) => rank(a) - rank(b));
   return q
     ? rows.filter(
         (r) =>

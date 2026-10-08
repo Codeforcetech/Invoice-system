@@ -165,17 +165,32 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       ).rejects.toThrow("すでに登録されています");
     });
 
-    it("lists only this workspace's people (owner first), and can filter", async () => {
+    it("lists everyone in the system, this workspace first, and marks the others as read-only", async () => {
       const all = await listWorkspaceUsers();
       expect(all[0]).toMatchObject({
         userId: owner,
         role: "OWNER",
         isSelf: true,
+        scope: "this",
       });
-      expect(all.map((r) => r.userId)).toContain(legacy);
-      expect(all.map((r) => r.userId)).not.toContain(otherMember); // 別の事業所の人は出ない
+      const byId = new Map(all.map((r) => [r.userId, r]));
+      expect(byId.get(legacy)).toMatchObject({ scope: "this", role: "VIEWER" });
+      // ほかの事業所の人も出る（見るだけ）
+      expect(byId.get(otherMember)).toMatchObject({
+        scope: "other",
+        otherRole: "申請者（別の事業所）",
+      });
+      expect(byId.get(other)).toMatchObject({
+        scope: "other",
+        otherRole: "管理者（自分の事業所）",
+      });
+      // この事業所の人が、ほかの事業所の人より先に並ぶ
+      const firstOther = all.findIndex((r) => r.scope === "other");
+      expect(all.slice(firstOther).every((r) => r.scope === "other")).toBe(
+        true,
+      );
       expect(
-        (await listWorkspaceUsers({ q: "承認" })).map((r) => r.name),
+        (await listWorkspaceUsers({ q: "au-new-approver" })).map((r) => r.name),
       ).toEqual(["承認 花子"]);
     });
 

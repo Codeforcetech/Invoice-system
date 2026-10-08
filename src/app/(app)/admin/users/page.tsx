@@ -54,7 +54,7 @@ export default async function AdminUsersPage(props: {
                 ユーザー一覧
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-slate-500">
-                この事業所のユーザーです。権限は、ここで、いつでも変更できます。メール/氏名で検索できます。
+                システム全体のユーザーです。上の白い行は、この事業所のユーザーで、権限をここで、いつでも変更できます。灰色の行は、ほかの事業所のユーザーで、見るだけです。メール/氏名で検索できます。
               </p>
             </div>
 

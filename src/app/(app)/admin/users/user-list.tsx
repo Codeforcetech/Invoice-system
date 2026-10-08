@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/data-table";
 import { selectClass } from "@/lib/ui/form-classes";
 
-/** ユーザー一覧。権限は、その場で変更できる（自分自身と、所有者を除く）。 */
+/** ユーザー一覧。この事業所のユーザーは、権限をその場で変更できる（自分自身と、所有者を除く）。ほかの事業所の人は、見るだけ。 */
 export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -59,7 +59,13 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
         </div>
       )}
       <DataTableShell>
-        <table className="w-full min-w-[640px] border-collapse">
+        <table className="w-full table-fixed border-collapse">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[30%]" />
+            <col className="w-[30%]" />
+            <col className="w-[16%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/90">
               <th className={dataTableHeadCell}>氏名</th>
@@ -70,6 +76,33 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
           </thead>
           <tbody>
             {rows.map((u) => {
+              if (u.scope === "other")
+                return (
+                  <tr
+                    key={u.userId}
+                    className={`${dataTableRow} bg-slate-50/60`}
+                  >
+                    <td
+                      className={`${dataTableCell} truncate text-slate-600`}
+                      title={u.name}
+                    >
+                      {u.name}
+                    </td>
+                    <td
+                      className={`${dataTableCell} truncate font-mono text-xs text-slate-500`}
+                      title={u.email}
+                    >
+                      {u.email}
+                    </td>
+                    <td
+                      className={`${dataTableCell} whitespace-nowrap text-sm text-slate-600`}
+                      colSpan={2}
+                      title="ほかの事業所のユーザーは、この画面では変更できません"
+                    >
+                      {u.otherRole}
+                    </td>
+                  </tr>
+                );
               const fixed = u.role === "OWNER" || u.isSelf;
               const legacy =
                 u.role !== "OWNER" &&
@@ -88,7 +121,7 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                     )}
                   </td>
                   <td
-                    className={`${dataTableCell} max-w-[14rem] truncate font-mono text-xs text-slate-600`}
+                    className={`${dataTableCell} truncate font-mono text-xs text-slate-600`}
                     title={u.email}
                   >
                     {u.email}
@@ -103,7 +136,7 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                     ) : (
                       <select
                         aria-label={`${u.name} の権限`}
-                        className={`${selectClass} min-w-[9.5rem]`}
+                        className={`${selectClass} w-full`}
                         value={u.role}
                         disabled={pending}
                         onChange={(e) => {
@@ -168,7 +201,7 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                           );
                         }}
                       >
-                        {u.active ? "停止する" : "停止中（再開）"}
+                        {u.active ? "停止" : "再開"}
                       </button>
                     )}
                   </td>
