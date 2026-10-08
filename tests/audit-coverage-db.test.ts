@@ -226,7 +226,7 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
         name: "新規ユーザー",
         email: created,
         password: "Another-Pass-2026!",
-        role: "USER",
+        accessRole: "SUBMITTER",
       });
       const row = (await logs({ entity: "USER" }))[0];
       expect(row.action).toBe("USER_CREATE");

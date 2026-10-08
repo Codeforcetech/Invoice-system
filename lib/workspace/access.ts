@@ -13,17 +13,35 @@ export const WORKSPACE_ROLES = [
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
 export const roleLabel: Record<WorkspaceRole, string> = {
-  SUBMITTER: "提出者（業務委託）",
+  SUBMITTER: "申請者",
   VIEWER: "閲覧のみ",
   EDITOR: "入力可",
   APPROVER: "承認可",
   ADMIN: "管理者",
 };
 
+/** ユーザー管理で選べる、3つの権限。 */
+export const ACCESS_ROLES = ["ADMIN", "APPROVER", "SUBMITTER"] as const;
+export type AccessRole = (typeof ACCESS_ROLES)[number];
+export const accessRoleLabel: Record<AccessRole, string> = {
+  ADMIN: "管理者",
+  APPROVER: "承認者",
+  SUBMITTER: "申請者",
+};
+export const accessRoleSummary: Record<AccessRole, string> = {
+  ADMIN:
+    "すべての操作ができます。ユーザーの作成・権限の変更、経営レポート・売上管理表、自社情報の設定も、管理者だけです。",
+  APPROVER:
+    "申請された請求書・領収書・経費の確認と、承認・差し戻しができます。請求書や取引先などの会社のデータも扱えますが、経営レポート・売上は見られません。",
+  SUBMITTER:
+    "請求書・領収書・経費を、管理者に申請するだけです。自分の申請と、その結果（承認・差し戻し）だけを見られます。",
+};
+
 export const roleSummary: Record<WorkspaceRole, string> = {
   SUBMITTER:
     "自分の請求書と領収書を提出し、提出状況と自分の情報だけを見られます。会社の請求書・帳簿・他の人の提出は見えません。",
-  VIEWER: "請求書・取引先・帳簿を見ることだけができます。経営レポート・売上管理表は見られません。",
+  VIEWER:
+    "請求書・取引先・帳簿を見ることだけができます。経営レポート・売上管理表は見られません。",
   EDITOR: "請求書・仕訳・経費・明細取込を入力できます。",
   APPROVER: "入力に加えて、経費精算などの承認と、仕訳・入金の取消ができます。",
   ADMIN:

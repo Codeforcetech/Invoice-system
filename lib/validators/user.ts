@@ -11,7 +11,8 @@ export const adminCreateUserSchema = z.object({
       (v) => new TextEncoder().encode(v).length <= 72,
       "パスワードは72バイト（半角72文字）以内にしてください",
     ),
-  role: z.enum(["USER", "ADMIN"]).default("USER"),
+  /** 付ける権限。指定がなければ、いちばん弱い「申請者」。 */
+  accessRole: z.enum(["ADMIN", "APPROVER", "SUBMITTER"]).default("SUBMITTER"),
 });
 
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;

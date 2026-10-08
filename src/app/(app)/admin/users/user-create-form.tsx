@@ -5,9 +5,17 @@ import type { Resolver } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { adminCreateUserSchema, type AdminCreateUserInput } from "@/lib/validators/user";
+import {
+  adminCreateUserSchema,
+  type AdminCreateUserInput,
+} from "@/lib/validators/user";
 import { adminCreateUser } from "@/actions/admin-user-actions";
 import { inputClass, labelClass, selectClass } from "@/lib/ui/form-classes";
+import {
+  ACCESS_ROLES,
+  accessRoleLabel,
+  accessRoleSummary,
+} from "@/lib/workspace/access";
 
 export function UserCreateForm() {
   const [saving, setSaving] = useState(false);
@@ -15,8 +23,15 @@ export function UserCreateForm() {
   const [err, setErr] = useState<string | null>(null);
 
   const form = useForm<AdminCreateUserInput>({
-    resolver: zodResolver(adminCreateUserSchema) as Resolver<AdminCreateUserInput>,
-    defaultValues: { name: "", email: "", password: "", role: "USER" },
+    resolver: zodResolver(
+      adminCreateUserSchema,
+    ) as Resolver<AdminCreateUserInput>,
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      accessRole: "SUBMITTER",
+    },
     mode: "onChange",
   });
 
@@ -27,7 +42,12 @@ export function UserCreateForm() {
     try {
       await adminCreateUser(values);
       setOk("ユーザーを作成しました。");
-      form.reset({ name: "", email: "", password: "", role: "USER" });
+      form.reset({
+        name: "",
+        email: "",
+        password: "",
+        accessRole: "SUBMITTER",
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "作成に失敗しました");
     } finally {
@@ -38,39 +58,90 @@ export function UserCreateForm() {
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label htmlFor="field-name" className={labelClass}>氏名</label>
-        <input id="field-name" className={`mt-1.5 ${inputClass}`} {...form.register("name")} />
+        <label htmlFor="field-name" className={labelClass}>
+          氏名
+        </label>
+        <input
+          id="field-name"
+          className={`mt-1.5 ${inputClass}`}
+          {...form.register("name")}
+        />
         {form.formState.errors.name && (
-          <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
+          <p className="mt-1 text-sm text-red-600">
+            {form.formState.errors.name.message}
+          </p>
         )}
       </div>
       <div>
-        <label htmlFor="field-email" className={labelClass}>メールアドレス</label>
-        <input id="field-email" type="email" className={`mt-1.5 ${inputClass}`} {...form.register("email")} />
+        <label htmlFor="field-email" className={labelClass}>
+          メールアドレス
+        </label>
+        <input
+          id="field-email"
+          type="email"
+          className={`mt-1.5 ${inputClass}`}
+          {...form.register("email")}
+        />
         {form.formState.errors.email && (
-          <p className="mt-1 text-sm text-red-600">{form.formState.errors.email.message}</p>
+          <p className="mt-1 text-sm text-red-600">
+            {form.formState.errors.email.message}
+          </p>
         )}
       </div>
       <div>
-        <label htmlFor="field-password" className={labelClass}>初期パスワード</label>
-        <input id="field-password" type="password" className={`mt-1.5 ${inputClass}`} {...form.register("password")} />
+        <label htmlFor="field-password" className={labelClass}>
+          初期パスワード
+        </label>
+        <input
+          id="field-password"
+          type="password"
+          className={`mt-1.5 ${inputClass}`}
+          {...form.register("password")}
+        />
         {form.formState.errors.password && (
-          <p className="mt-1 text-sm text-red-600">{form.formState.errors.password.message}</p>
+          <p className="mt-1 text-sm text-red-600">
+            {form.formState.errors.password.message}
+          </p>
         )}
       </div>
       <div>
-        <label className={labelClass}>権限</label>
-        <select className={`mt-1.5 ${selectClass}`} {...form.register("role")}>
-          <option value="USER">一般</option>
-          <option value="ADMIN">管理者</option>
+        <label htmlFor="field-access-role" className={labelClass}>
+          権限
+        </label>
+        <select
+          id="field-access-role"
+          className={`mt-1.5 ${selectClass}`}
+          {...form.register("accessRole")}
+        >
+          {ACCESS_ROLES.map((r) => (
+            <option key={r} value={r}>
+              {accessRoleLabel[r]}
+            </option>
+          ))}
         </select>
+        <p className="mt-2 rounded-lg bg-slate-50 p-3 text-xs leading-6 text-slate-600">
+          {accessRoleSummary[form.watch("accessRole")]}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          権限は、作成したあとも、右の一覧から、いつでも変更できます。
+        </p>
       </div>
 
       {err ? (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {err}
+        </div>
       ) : null}
       {ok ? (
-        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div>
+        <div
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+        >
+          {ok}
+        </div>
       ) : null}
 
       <div className="flex justify-end pt-1">
