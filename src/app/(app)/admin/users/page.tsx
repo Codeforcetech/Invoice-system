@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { listWorkspaceUsers } from "@/actions/admin-user-actions";
+import { adminSlots, listWorkspaceUsers } from "@/actions/admin-user-actions";
 import { UserList } from "@/app/(app)/admin/users/user-list";
 import { UserCreateForm } from "@/app/(app)/admin/users/user-create-form";
 import { AppButtonLink } from "@/components/ui/app-button";
@@ -20,14 +20,17 @@ export default async function AdminUsersPage(props: {
 
   const sp = (await props.searchParams) ?? {};
   const q = toStr(sp.q);
-  const users = await listWorkspaceUsers({ q: q || undefined });
+  const [users, slots] = await Promise.all([
+    listWorkspaceUsers({ q: q || undefined }),
+    adminSlots(),
+  ]);
 
   return (
     <PageShell>
       <SectionHeader
         variant="page"
         title="ユーザー管理"
-        description="管理者だけが、ユーザーを作成し、権限（管理者・承認者・申請者）を決められます。"
+        description="オーナーと管理者が、ユーザーを作成し、権限（管理者・承認者・申請者）を決められます。管理者の任命は、オーナーだけです。"
         action={
           <AppButtonLink href="/dashboard" variant="secondary">
             ダッシュボード
@@ -42,7 +45,7 @@ export default async function AdminUsersPage(props: {
               ユーザー作成
             </h2>
             <div className="mt-5">
-              <UserCreateForm />
+              <UserCreateForm slots={slots} />
             </div>
           </CardSection>
         </Card>
@@ -54,7 +57,7 @@ export default async function AdminUsersPage(props: {
                 ユーザー一覧
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-slate-500">
-                システム全体のユーザーです。上の白い行は、この事業所のユーザーで、権限をここで、いつでも変更できます。灰色の行は、ほかの事業所のユーザーで、見るだけです。メール/氏名で検索できます。
+                システム全体のユーザーです。白い行は、この会社のユーザーで、権限をここで、いつでも変更できます。灰色の行は、ほかの会社のユーザーで、見るだけです。メール/氏名で検索できます。
               </p>
             </div>
 
@@ -79,7 +82,7 @@ export default async function AdminUsersPage(props: {
               </button>
             </form>
 
-            <UserList rows={users} />
+            <UserList rows={users} slots={slots} />
           </CardSection>
         </Card>
       </div>

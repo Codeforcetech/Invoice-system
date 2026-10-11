@@ -28,9 +28,12 @@ export const accessRoleLabel: Record<AccessRole, string> = {
   APPROVER: "承認者",
   SUBMITTER: "申請者",
 };
+/** 管理者は、オーナーのほかに、何人まで任命できるか（オーナー1人 ＋ 管理者2人 ＝ 最大3人）。 */
+export const MAX_WORKSPACE_ADMINS = 2;
+
 export const accessRoleSummary: Record<AccessRole, string> = {
   ADMIN:
-    "すべての操作ができます。ユーザーの作成・権限の変更、経営レポート・売上管理表、自社情報の設定も、管理者だけです。",
+    "オーナーに次ぐ権限です。承認者・申請者の作成と変更、経営レポート・売上管理表、自社情報の設定ができます。管理者の任命と解任は、オーナーだけです。",
   APPROVER:
     "申請された請求書・領収書・経費の確認と、承認・差し戻しができます。請求書や取引先などの会社のデータも扱えますが、経営レポート・売上は見られません。",
   SUBMITTER:
@@ -45,7 +48,7 @@ export const roleSummary: Record<WorkspaceRole, string> = {
   EDITOR: "請求書・仕訳・経費・明細取込を入力できます。",
   APPROVER: "入力に加えて、経費精算などの承認と、仕訳・入金の取消ができます。",
   ADMIN:
-    "すべての操作に加えて、経営レポート・売上管理表、勘定科目・固定資産・自社情報・メンバー・操作ログを管理できます。",
+    "オーナーと管理者は、すべての操作に加えて、経営レポート・売上管理表、勘定科目・固定資産・自社情報・メンバー・操作ログを管理できます。管理者は、オーナーのほかに2人までで、任命できるのは、オーナーだけです。",
 };
 
 export class PermissionError extends Error {

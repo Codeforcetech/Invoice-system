@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import {
   ACCESS_ROLES,
+  MAX_WORKSPACE_ADMINS,
   accessRoleLabel,
   assertRole,
   isWorkspaceRole,
@@ -44,6 +45,35 @@ async function adminContext() {
   return { admin, ws };
 }
 
+/** 管理者を任命できるのは、オーナーだけ。人数にも上限がある（オーナーのほかに MAX_WORKSPACE_ADMINS 人）。 */
+async function assertCanAppointAdmin(
+  tx: Tx,
+  ws: { ownerId: string; isOwner: boolean },
+) {
+  if (!ws.isOwner)
+    throw new Error("管理者を任命できるのは、オーナーだけです。");
+  const admins = await tx.workspaceMember.count({
+    where: { ownerId: ws.ownerId, role: "ADMIN" },
+  });
+  if (admins >= MAX_WORKSPACE_ADMINS)
+    throw new Error(
+      `管理者は、オーナーのほかに${MAX_WORKSPACE_ADMINS}人までです。ほかの管理者の権限を変えてから、任命してください。`,
+    );
+}
+
+/** 権限の選択欄に出す、管理者の枠の状況（オーナーかどうか、あと何人任命できるか）。 */
+export async function adminSlots() {
+  const { ws } = await adminContext();
+  const admins = await prisma.workspaceMember.count({
+    where: { ownerId: ws.ownerId, role: "ADMIN" },
+  });
+  return {
+    isOwner: ws.isOwner,
+    left: Math.max(0, MAX_WORKSPACE_ADMINS - admins),
+    max: MAX_WORKSPACE_ADMINS,
+  };
+}
+
 /** 経費精算の精算先があるときだけ、権限に合わせて、精算のメンバーにも入れる（管理者・承認者は承認、申請者は申請）。 */
 async function syncClaimMember(
   tx: Tx,
@@ -75,7 +105,7 @@ export type WorkspaceUserRow = {
   isSelf: boolean;
   /** this: この事業所のユーザー（権限を変えられる）／other: ほかの事業所のユーザー（見るだけ） */
   scope: "this" | "other";
-  /** ほかの事業所のユーザーの、その事業所での立場（例：「管理者（自分の事業所）」） */
+  /** ほかの事業所のユーザーの、その事業所での立場（例：「別の会社のオーナー」） */
   otherRole?: string;
 };
 
@@ -123,8 +153,8 @@ export async function listWorkspaceUsers(
       };
     const label =
       m && m.active && isWorkspaceRole(m.role)
-        ? `${roleLabel[m.role as WorkspaceRole]}（別の事業所）`
-        : "管理者（自分の事業所）";
+        ? `${roleLabel[m.role as WorkspaceRole]}（別の会社）`
+        : "別の会社のオーナー";
     return {
       ...base,
       role: "OWNER" as const,
@@ -153,6 +183,7 @@ export async function adminCreateUser(raw: unknown) {
   try {
     const created = await prisma.$transaction(async (tx) => {
       await accountingLock(tx, ws.ownerId);
+      if (input.accessRole === "ADMIN") await assertCanAppointAdmin(tx, ws);
       const row = await tx.user.create({
         data: {
           name: input.name,
@@ -218,6 +249,9 @@ export async function changeUserRole(raw: unknown): Promise<Result> {
       });
       if (!m) throw new Error("この事業所のユーザーが見つかりません。");
       if (m.role === v.accessRole) return;
+      if (v.accessRole === "ADMIN") await assertCanAppointAdmin(tx, ws);
+      else if (m.role === "ADMIN" && !ws.isOwner)
+        throw new Error("管理者の権限を変えられるのは、オーナーだけです。");
       await tx.workspaceMember.update({
         where: { id: m.id },
         data: { role: v.accessRole },
@@ -270,6 +304,8 @@ export async function setUserActive(raw: unknown): Promise<Result> {
       });
       if (!m) throw new Error("この事業所のユーザーが見つかりません。");
       if (m.active === v.active) return;
+      if (m.role === "ADMIN" && !ws.isOwner)
+        throw new Error("管理者を停止・再開できるのは、オーナーだけです。");
       await tx.workspaceMember.update({
         where: { id: m.id },
         data: { active: v.active },

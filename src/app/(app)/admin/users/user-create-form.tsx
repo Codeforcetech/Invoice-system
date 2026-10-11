@@ -17,7 +17,10 @@ import {
   accessRoleSummary,
 } from "@/lib/workspace/access";
 
-export function UserCreateForm() {
+export type AdminSlots = { isOwner: boolean; left: number; max: number };
+
+export function UserCreateForm({ slots }: { slots: AdminSlots }) {
+  const adminBlocked = !slots.isOwner || slots.left <= 0;
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -114,8 +117,9 @@ export function UserCreateForm() {
           {...form.register("accessRole")}
         >
           {ACCESS_ROLES.map((r) => (
-            <option key={r} value={r}>
+            <option key={r} value={r} disabled={r === "ADMIN" && adminBlocked}>
               {accessRoleLabel[r]}
+              {r === "ADMIN" && adminBlocked ? "（選べません）" : ""}
             </option>
           ))}
         </select>
@@ -124,6 +128,9 @@ export function UserCreateForm() {
         </p>
         <p className="mt-1 text-xs text-slate-500">
           権限は、作成したあとも、右の一覧から、いつでも変更できます。
+          {!slots.isOwner
+            ? "管理者を任命できるのは、オーナーだけです。"
+            : `管理者は、オーナーのほかに${slots.max}人までです（あと${slots.left}人）。`}
         </p>
       </div>
 

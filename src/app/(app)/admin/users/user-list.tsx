@@ -20,9 +20,17 @@ import {
   dataTableRow,
 } from "@/components/ui/data-table";
 import { selectClass } from "@/lib/ui/form-classes";
+import type { AdminSlots } from "@/app/(app)/admin/users/user-create-form";
 
 /** ユーザー一覧。この事業所のユーザーは、権限をその場で変更できる（自分自身と、所有者を除く）。ほかの事業所の人は、見るだけ。 */
-export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
+export function UserList({
+  rows,
+  slots,
+}: {
+  rows: WorkspaceUserRow[];
+  slots: AdminSlots;
+}) {
+  const adminBlocked = !slots.isOwner || slots.left <= 0;
   const router = useRouter();
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
@@ -103,7 +111,11 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                     </td>
                   </tr>
                 );
-              const fixed = u.role === "OWNER" || u.isSelf;
+              // 管理者の権限と状態は、オーナーだけが変えられる。
+              const fixed =
+                u.role === "OWNER" ||
+                u.isSelf ||
+                (u.role === "ADMIN" && !slots.isOwner);
               const legacy =
                 u.role !== "OWNER" &&
                 !(ACCESS_ROLES as readonly string[]).includes(u.role);
@@ -130,7 +142,7 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                     {fixed ? (
                       <span className="whitespace-nowrap text-sm">
                         {u.role === "OWNER"
-                          ? "管理者（所有者）"
+                          ? "オーナー"
                           : roleLabel[u.role as keyof typeof roleLabel]}
                       </span>
                     ) : (
@@ -166,7 +178,15 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                           </option>
                         )}
                         {ACCESS_ROLES.map((r) => (
-                          <option key={r} value={r}>
+                          <option
+                            key={r}
+                            value={r}
+                            disabled={
+                              r === "ADMIN" &&
+                              adminBlocked &&
+                              u.role !== "ADMIN"
+                            }
+                          >
                             {accessRoleLabel[r]}
                           </option>
                         ))}
@@ -174,9 +194,13 @@ export function UserList({ rows }: { rows: WorkspaceUserRow[] }) {
                     )}
                   </td>
                   <td className={dataTableCell}>
-                    {u.role === "OWNER" || u.isSelf ? (
+                    {fixed ? (
                       <span className="whitespace-nowrap text-sm text-slate-500">
-                        利用中
+                        {u.role === "OWNER" || u.isSelf
+                          ? "利用中"
+                          : u.active
+                            ? "利用中"
+                            : "停止中"}
                       </span>
                     ) : (
                       <button

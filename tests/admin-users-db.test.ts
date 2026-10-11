@@ -16,6 +16,7 @@ vi.mock("next/navigation", () => ({
 import { prisma } from "@/lib/db/prisma";
 import {
   adminCreateUser,
+  adminSlots,
   changeUserRole,
   listWorkspaceUsers,
   setUserActive,
@@ -34,11 +35,12 @@ const emails = [
   "au-new-approver@example.test",
   "au-new-admin@example.test",
 ];
+const extraEmails = ["au-third@example.test"];
 const pw = "Strong-Pass-2026!";
 
 async function cleanup() {
   const created = await prisma.user.findMany({
-    where: { email: { in: emails } },
+    where: { email: { in: [...emails, ...extraEmails] } },
     select: { id: true },
   });
   const users = [...fixed, ...created.map((u) => u.id)];
@@ -178,11 +180,11 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
       // ほかの事業所の人も出る（見るだけ）
       expect(byId.get(otherMember)).toMatchObject({
         scope: "other",
-        otherRole: "申請者（別の事業所）",
+        otherRole: "申請者（別の会社）",
       });
       expect(byId.get(other)).toMatchObject({
         scope: "other",
-        otherRole: "管理者（自分の事業所）",
+        otherRole: "別の会社のオーナー",
       });
       // この事業所の人が、ほかの事業所の人より先に並ぶ
       const firstOther = all.findIndex((r) => r.scope === "other");
@@ -261,6 +263,70 @@ describe.skipIf(process.env.RUN_ACCOUNTING_DB_TESTS !== "1")(
           userId: await idOf(emails[1]),
           accessRole: "SUBMITTER",
         }),
+      ).toEqual({ ok: true });
+    });
+
+    it("limits administrators to the owner plus two, and only the owner can appoint or remove them", async () => {
+      const [sub, app, adm] = await Promise.all(emails.map(idOf));
+      // オーナーは、管理者を2人まで任命できる（すでに adm が1人）
+      auth.id = owner;
+      auth.role = "ADMIN";
+      expect(
+        await changeUserRole({ userId: app, accessRole: "ADMIN" }),
+      ).toEqual({ ok: true });
+      // 3人目は、断られる
+      const third = await changeUserRole({ userId: sub, accessRole: "ADMIN" });
+      expect(third).toMatchObject({ ok: false });
+      expect(JSON.stringify(third)).toContain("2人まで");
+      await expect(
+        adminCreateUser({
+          name: "三人目",
+          email: "au-third@example.test",
+          password: pw,
+          accessRole: "ADMIN",
+        }),
+      ).rejects.toThrow("2人まで");
+      expect(
+        await prisma.user.count({ where: { email: "au-third@example.test" } }),
+      ).toBe(0);
+      expect((await adminSlots()).left).toBe(0);
+      // 管理者（オーナーではない人）は、管理者を任命・解任・停止できない
+      auth.id = adm;
+      auth.role = "ADMIN";
+      expect((await adminSlots()).isOwner).toBe(false);
+      expect(
+        await changeUserRole({ userId: sub, accessRole: "ADMIN" }),
+      ).toMatchObject({ ok: false });
+      expect(
+        await changeUserRole({ userId: app, accessRole: "SUBMITTER" }),
+      ).toMatchObject({ ok: false });
+      expect(await setUserActive({ userId: app, active: false })).toMatchObject(
+        { ok: false },
+      );
+      await expect(
+        adminCreateUser({
+          name: "管理者作成",
+          email: "au-third@example.test",
+          password: pw,
+          accessRole: "ADMIN",
+        }),
+      ).rejects.toThrow("オーナーだけ");
+      // でも、承認者と申請者は、作成も変更もできる
+      expect(
+        await changeUserRole({ userId: sub, accessRole: "APPROVER" }),
+      ).toEqual({ ok: true });
+      expect(
+        await changeUserRole({ userId: sub, accessRole: "SUBMITTER" }),
+      ).toEqual({ ok: true });
+      // オーナーが解任すれば、枠が空く
+      auth.id = owner;
+      expect(
+        await changeUserRole({ userId: app, accessRole: "SUBMITTER" }),
+      ).toEqual({ ok: true });
+      expect((await adminSlots()).left).toBe(1);
+      // あとの手順のために、承認者に戻す
+      expect(
+        await changeUserRole({ userId: app, accessRole: "APPROVER" }),
       ).toEqual({ ok: true });
     });
 

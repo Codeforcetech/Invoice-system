@@ -472,7 +472,7 @@ export default async function GuidePage({
               </div>
               <ul className="mt-5 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
                 <li>
-                  最初にアカウントを使い始めた人（事業所の所有者）は、常に「管理者」です。
+                  会社（事業所）の「オーナー」は1人で、最初にアカウントを使い始めた人です。いつも最上位で、権限を変えられません。管理者は、オーナーのほかに2人までで、任命できるのは、オーナーだけです。
                 </li>
                 <li>
                   新しいアカウントの発行は、「全体管理者」だけが、「ユーザー管理」で行えます。
